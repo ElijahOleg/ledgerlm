@@ -132,11 +132,11 @@ def test_recorder_never_raises_into_host_app(
         MockLLMClient(),
         recorder=Recorder(session_factory=broken_session_factory),  # type: ignore[arg-type]
     )
-    with caplog.at_level(logging.ERROR, logger="ledgerlm"):
+    with caplog.at_level(logging.WARNING, logger="ledgerlm"):
         resp = client.messages.create(model="mock-model", messages=MESSAGES)
 
     assert resp.content == "mock response"  # the caller still gets the response
-    assert any("failed to record" in r.message for r in caplog.records)
+    assert any("failed to record" in r.getMessage() for r in caplog.records)
 
 
 def test_non_intercepted_attributes_pass_through(ledger: Ledger) -> None:

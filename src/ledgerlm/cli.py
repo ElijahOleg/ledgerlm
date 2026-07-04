@@ -43,14 +43,10 @@ def _seed_path() -> Path | None:
 @app.command()
 def init() -> None:
     """Create/upgrade the ledger schema; seed prices if the table is empty."""
-    from alembic import command
-    from alembic.config import Config
+    from ledgerlm.db.migrate import upgrade_to_head
 
     settings = get_settings()
-    cfg = Config()
-    cfg.set_main_option("script_location", str(Path(ledgerlm.db.__file__).parent / "migrations"))
-    cfg.set_main_option("sqlalchemy.url", settings.resolved_db_url)
-    command.upgrade(cfg, "head")
+    upgrade_to_head(settings.resolved_db_url)
     typer.echo(f"schema up to date: {settings.resolved_db_url}")
 
     with _session_factory()() as session:

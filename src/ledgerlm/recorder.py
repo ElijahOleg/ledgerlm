@@ -1,13 +1,23 @@
-"""Event persistence. The recorder NEVER raises into the host app (DESIGN.md §3.4):
-any failure here is logged and swallowed; the wrapped call's result is always
-returned to the caller regardless."""
+"""Event persistence. The recorder NEVER raises into the host app (P4): any
+failure here is logged and swallowed; the wrapped call's result is always
+returned to the caller regardless.
+
+D17 keeps never-raise from decaying into silent data loss: a first write
+against a schema-less SQLite ledger auto-initializes it (programmatic
+migration, one retry; SQLite only — never Postgres), and persistent failures
+emit rate-limited REPEATING warnings carrying a cumulative dropped-event
+count instead of a single swallowed log line.
+"""
 
 from __future__ import annotations
 
 import logging
+import threading
+import time
 from dataclasses import dataclass
 from typing import Any
 
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session, sessionmaker
 
 from ledgerlm.db.models import LlmEvent
@@ -31,21 +41,87 @@ class CallEvent:
     usage: NormalizedUsage | None  # None when the provider returned no usage
     raw_usage: dict[str, Any]
     error_type: str | None = None
+    first_token_ms: int | None = None  # streaming only
     prompt_hash: str | None = None
     provider_request_id: str | None = None
 
 
 class Recorder:
+    # Minimum seconds between dropped-event warnings; tests may lower it.
+    warn_interval_s: float = 60.0
+
     def __init__(self, session_factory: sessionmaker[Session] | None = None) -> None:
         self._session_factory = session_factory
+        self._lock = threading.Lock()
+        self._dropped = 0
+        self._last_warned: float | None = None
+        self._auto_init_attempted = False
 
     def record(self, event: CallEvent) -> None:
         try:
             self._record(event)
+            return
+        except OperationalError as exc:
+            if self._try_auto_init(exc):
+                try:
+                    self._record(event)
+                    return
+                except Exception:
+                    logger.exception("ledgerlm: write retry after auto-init failed")
         except Exception:
-            logger.exception(
-                "ledgerlm: failed to record LLM event (the wrapped call itself succeeded "
-                "and its response was returned to the caller)"
+            logger.debug("ledgerlm: event write failed", exc_info=True)
+        self._note_dropped(event)
+
+    def _try_auto_init(self, exc: OperationalError) -> bool:
+        """Migrate a schema-less SQLite ledger to head, once per recorder."""
+        if self._auto_init_attempted or "no such table" not in str(exc):
+            return False
+        self._auto_init_attempted = True
+        url = self._sqlite_url()
+        if url is None:
+            return False  # not SQLite (or unknown) — never auto-migrate Postgres
+        try:
+            from ledgerlm.db.migrate import upgrade_to_head
+
+            upgrade_to_head(url)
+        except Exception:
+            logger.exception("ledgerlm: failed to auto-initialize ledger at %s", url)
+            return False
+        logger.warning("ledgerlm: initialized empty ledger schema at %s", url)
+        return True
+
+    def _sqlite_url(self) -> str | None:
+        factory = self._session_factory
+        if factory is None:
+            from ledgerlm.config import get_settings
+
+            url = get_settings().resolved_db_url
+            return url if url.startswith("sqlite") else None
+        engine = getattr(factory, "kw", {}).get("bind")
+        if engine is None or getattr(engine, "dialect", None) is None:
+            return None
+        if engine.dialect.name != "sqlite":
+            return None
+        return str(engine.url.render_as_string(hide_password=False))
+
+    def _note_dropped(self, event: CallEvent) -> None:
+        """Rate-limited repeating warning with a cumulative dropped count (D17)."""
+        with self._lock:
+            self._dropped += 1
+            dropped = self._dropped
+            now = time.monotonic()
+            should_warn = (
+                self._last_warned is None or now - self._last_warned >= self.warn_interval_s
+            )
+            if should_warn:
+                self._last_warned = now
+        if should_warn:
+            logger.warning(
+                "ledgerlm: failed to record LLM event (provider=%s model=%s) — %d event(s) "
+                "dropped so far by this recorder; the wrapped calls themselves were unaffected",
+                event.provider,
+                event.model,
+                dropped,
             )
 
     def _record(self, event: CallEvent) -> None:
@@ -67,6 +143,7 @@ class Recorder:
                     status=event.status,
                     error_type=event.error_type,
                     latency_ms=event.latency_ms,
+                    first_token_ms=event.first_token_ms,
                     input_tokens=usage.input_tokens,
                     output_tokens=usage.output_tokens,
                     cache_read_tokens=usage.cache_read_tokens,
