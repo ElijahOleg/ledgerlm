@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>LedgerLM — {{ page_title }}</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <script src="/static/htmx.min.js" defer></script>
+  <script src="/static/chart.umd.js"></script>
+  <script src="/static/app.js" defer></script>
+</head>
+<body>
+  <header>
+    <div class="brand">LedgerLM <span>· local ledger</span></div>
+    <nav>
+      <a href="/" class="{{ 'active' if page == 'overview' else '' }}">Overview</a>
+      <a href="/attribution" class="{{ 'active' if page == 'attribution' else '' }}">Attribution</a>
+      <a href="/top-calls" class="{{ 'active' if page == 'top-calls' else '' }}">Top calls</a>
+      <a href="/prices" class="{{ 'active' if page == 'prices' else '' }}">Prices</a>
+    </nav>
+  </header>
+
+  {% if banner_unpriced > 0 %}
+  <div class="banner-unpriced" role="status">
+    <span aria-hidden="true">&#9888;</span>
+    <span><strong>{{ banner_unpriced | num }} unpriced row{{ 's' if banner_unpriced != 1 else '' }}</strong>
+      in the ledger — cost totals exclude them. Fix with
+      <code>ledgerlm prices set</code> then <code>ledgerlm prices backfill</code>.</span>
+  </div>
+  {% endif %}
+
+  <main>
+    {% block body %}{% endblock %}
+    <footer class="meta">All data local · read-only view · times UTC</footer>
+  </main>
+</body>
+</html>

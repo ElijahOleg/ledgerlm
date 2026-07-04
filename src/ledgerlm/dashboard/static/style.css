@@ -1,0 +1,139 @@
+/* LedgerLM dashboard — light theme. Vendored; no external requests ever. */
+
+:root {
+  /* palette roles (dataviz reference palette) */
+  --surface-1: #fcfcfb;
+  --page: #f9f9f7;
+  --ink: #0b0b0b;
+  --ink-2: #52514e;
+  --muted: #898781;
+  --grid: #e1e0d9;
+  --baseline: #c3c2b7;
+  --border: rgba(11, 11, 11, 0.10);
+  --series-1: #2a78d6;
+  --warning-bg: #fdf3dc;
+  --warning-edge: #fab219;
+  --critical: #d03b3b;
+  --good: #006300;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--page);
+  color: var(--ink);
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+header {
+  display: flex;
+  align-items: baseline;
+  gap: 2rem;
+  padding: 0.8rem 1.5rem;
+  background: var(--surface-1);
+  border-bottom: 1px solid var(--grid);
+}
+
+.brand { font-weight: 700; font-size: 1.05rem; }
+.brand span { color: var(--muted); font-weight: 400; }
+
+nav { display: flex; gap: 1.1rem; }
+nav a { color: var(--ink-2); text-decoration: none; padding: 0.15rem 0; }
+nav a:hover { color: var(--ink); }
+nav a.active { color: var(--ink); font-weight: 600; box-shadow: 0 2px 0 var(--series-1); }
+
+main { max-width: 1200px; margin: 0 auto; padding: 1rem 1.5rem 3rem; }
+
+/* Persistent unpriced banner — icon + label, never color alone */
+.banner-unpriced {
+  display: flex;
+  gap: 0.5rem;
+  align-items: baseline;
+  max-width: 1200px;
+  margin: 1rem auto 0;
+  padding: 0.55rem 1rem;
+  background: var(--warning-bg);
+  border-left: 3px solid var(--warning-edge);
+  border-radius: 4px;
+  color: var(--ink-2);
+}
+.banner-unpriced strong { color: var(--ink); }
+.banner-unpriced code { background: rgba(11, 11, 11, 0.06); padding: 0 0.3em; border-radius: 3px; }
+
+/* Filter row — one row above the charts */
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  align-items: center;
+  margin: 1rem 0;
+}
+.filters label { color: var(--muted); font-size: 0.85rem; }
+.filters select {
+  font: inherit;
+  padding: 0.3rem 0.5rem;
+  border: 1px solid var(--baseline);
+  border-radius: 6px;
+  background: var(--surface-1);
+  color: var(--ink);
+}
+
+/* Stat tiles */
+.tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 0.8rem;
+  margin-bottom: 1rem;
+}
+.tile {
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.7rem 0.9rem;
+}
+.tile .label { color: var(--muted); font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.04em; }
+.tile .value { font-size: 1.45rem; font-weight: 650; margin-top: 0.1rem; }
+.tile .sub { color: var(--ink-2); font-size: 0.8rem; }
+.tile.alert .value { color: var(--critical); }
+
+/* Cards and charts */
+.card {
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.9rem 1.1rem;
+  margin-bottom: 1rem;
+}
+.card h2 { font-size: 0.95rem; margin: 0 0 0.6rem; color: var(--ink-2); font-weight: 600; }
+.chart-box { position: relative; height: 260px; }
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+@media (max-width: 900px) { .grid-2 { grid-template-columns: 1fr; } }
+
+/* Tables — the always-available table view beside every chart */
+.table-wrap { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
+th, td { text-align: left; padding: 0.4rem 0.7rem; border-bottom: 1px solid var(--grid); white-space: nowrap; }
+th { color: var(--muted); font-weight: 600; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.03em; }
+td.num, th.num { text-align: right; }
+tbody tr:hover { background: rgba(42, 120, 214, 0.05); }
+td .none { color: var(--muted); }
+
+.badge {
+  display: inline-block;
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 0.05rem 0.45rem;
+  border-radius: 9px;
+  border: 1px solid var(--baseline);
+  color: var(--ink-2);
+}
+.badge.warn { border-color: var(--warning-edge); background: var(--warning-bg); }
+.badge.err { border-color: var(--critical); color: var(--critical); }
+.badge.ok { border-color: var(--good); color: var(--good); }
+
+.hash { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.82rem; color: var(--ink-2); }
+.note { color: var(--ink-2); font-size: 0.85rem; }
+footer.meta { color: var(--muted); font-size: 0.8rem; margin-top: 2rem; }

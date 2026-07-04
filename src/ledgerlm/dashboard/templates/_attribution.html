@@ -1,0 +1,31 @@
+<section class="card">
+  <h2>Spend by {{ params.by }} (USD)</h2>
+  <div class="chart-box">
+    <canvas id="chart-attribution" data-chart="hbar"
+            data-endpoint="/api/spend-by-group?{{ qs_with_by }}"></canvas>
+  </div>
+</section>
+
+<section class="card">
+  <div class="table-wrap">
+    <table>
+      <thead><tr>
+        <th>{{ params.by }}</th><th class="num">calls</th><th class="num">in</th>
+        <th class="num">out</th><th class="num">cache r</th><th class="num">cache w</th>
+        <th class="num">cost</th><th class="num">unpriced</th>
+      </tr></thead>
+      <tbody>
+      {% for r in rows %}
+        <tr>
+          <td>{{ r.key }}</td><td class="num">{{ r.calls | num }}</td>
+          <td class="num">{{ r.input_tokens | num }}</td><td class="num">{{ r.output_tokens | num }}</td>
+          <td class="num">{{ r.cache_read_tokens | num }}</td><td class="num">{{ r.cache_write_tokens | num }}</td>
+          <td class="num">{{ r.cost_usd | usd }}</td><td class="num">{{ r.unpriced | num }}</td>
+        </tr>
+      {% else %}
+        <tr><td colspan="8" class="note">no rows in this window</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>

@@ -1,0 +1,52 @@
+<form class="filters" hx-get="{{ request.url.path }}" hx-target="#content"
+      hx-swap="innerHTML" hx-push-url="true">
+  <label>window
+    <select name="since" onchange="this.form.requestSubmit()">
+      {% for preset in since_presets %}
+      <option value="{{ preset }}" {{ 'selected' if params.since == preset else '' }}>{{ preset }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label>provider
+    <select name="provider" onchange="this.form.requestSubmit()">
+      <option value="">all</option>
+      {% for p in options.providers %}
+      <option value="{{ p }}" {{ 'selected' if params.provider == p else '' }}>{{ p }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label>model
+    <select name="model" onchange="this.form.requestSubmit()">
+      <option value="">all</option>
+      {% for m in options.models %}
+      <option value="{{ m }}" {{ 'selected' if params.model == m else '' }}>{{ m }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label>project
+    <select name="project" onchange="this.form.requestSubmit()">
+      <option value="">all</option>
+      {% for pr in options.projects %}
+      <option value="{{ pr }}" {{ 'selected' if params.project == pr else '' }}>{{ pr }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  {% if show_by %}
+  <label>group by
+    <select name="by" onchange="this.form.requestSubmit()">
+      {% for dim in by_options %}
+      <option value="{{ dim }}" {{ 'selected' if params.by == dim else '' }}>{{ dim }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  {% endif %}
+  {% if show_limit %}
+  <label>show
+    <select name="limit" onchange="this.form.requestSubmit()">
+      {% for n in (25, 50, 100, 250) %}
+      <option value="{{ n }}" {{ 'selected' if params.limit == n|string else '' }}>top {{ n }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  {% endif %}
+</form>

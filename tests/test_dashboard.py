@@ -238,3 +238,83 @@ def test_prices_staleness_and_notes(fixture_ledger: Ledger) -> None:
     assert sonnet5.note is not None and "2026-08-31" in sonnet5.note
     verified = [r for r in rows if r.last_verified is not None]
     assert verified and all(r.days_since_verified is not None for r in verified)
+
+
+# ---- Route smoke tests (FastAPI TestClient; in-process, no network) ----
+
+
+@pytest.fixture
+def client(fixture_ledger: Ledger) -> object:
+    from fastapi.testclient import TestClient
+
+    from ledgerlm.dashboard.app import create_app
+
+    return TestClient(create_app(fixture_ledger.session_factory))
+
+
+def test_overview_page_renders_key_numbers(client: object) -> None:
+    resp = client.get("/", params={"since": "all"})  # type: ignore[attr-defined]
+    assert resp.status_code == 200
+    html = resp.text
+    # headline spend 1.18, 6 calls, cache buckets, unpriced tile + banner
+    assert "$1.1800" in html
+    assert "4,000" in html and "1,000" in html  # cache read / write tiles
+    assert "unpriced" in html
+    assert "2 unpriced rows" in html  # persistent banner (ledger-wide count)
+    # zero external requests: every src/href on the page is a local path
+    import re
+
+    for url in re.findall(r'(?:src|href)="([^"]+)"', html):
+        assert not url.startswith(("http://", "https://", "//")), url
+
+
+def test_overview_htmx_request_returns_partial(client: object) -> None:
+    resp = client.get("/", params={"since": "all"}, headers={"HX-Request": "true"})  # type: ignore[attr-defined]
+    assert resp.status_code == 200
+    assert "<html" not in resp.text  # fragment only
+    assert "$1.1800" in resp.text
+
+
+def test_attribution_page_promoted_and_tag_dimensions(client: object) -> None:
+    resp = client.get("/attribution", params={"since": "all", "by": "project"})  # type: ignore[attr-defined]
+    assert resp.status_code == 200
+    assert "blog" in resp.text and "shop" in resp.text
+
+    resp = client.get("/attribution", params={"since": "all", "by": "tag:team"})  # type: ignore[attr-defined]
+    assert resp.status_code == 200
+    assert "core" in resp.text and "infra" in resp.text
+    assert "$0.1600" in resp.text  # team=core: 0.05 + 0.11
+
+
+def test_top_calls_page(client: object) -> None:
+    resp = client.get("/top-calls", params={"since": "all"})  # type: ignore[attr-defined]
+    assert resp.status_code == 200
+    html = resp.text
+    assert "$1.0000" in html  # most expensive call
+    assert "team=core" in html
+    assert "badge err" in html  # the error row's status badge
+
+
+def test_prices_page(client: object) -> None:
+    resp = client.get("/prices")  # type: ignore[attr-defined]
+    assert resp.status_code == 200
+    assert "claude-sonnet-5" in resp.text
+    assert "2026-08-31" in resp.text  # intro-pricing note surfaced
+
+
+def test_api_spend_by_day(client: object) -> None:
+    resp = client.get("/api/spend-by-day", params={"since": "all"})  # type: ignore[attr-defined]
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["labels"][-2:] == ["2026-07-01", "2026-07-02"]
+    assert data["values"][-2:] == [0.16, 0.02]
+    assert data["unpriced"][-2:] == [0, 2]
+
+
+def test_api_spend_by_group_validates_dimension(client: object) -> None:
+    resp = client.get("/api/spend-by-group", params={"by": "model", "since": "all"})  # type: ignore[attr-defined]
+    assert resp.status_code == 200
+    assert set(resp.json()["labels"]) == {"claude-fable-5", "gpt-5.4", "mystery-model"}
+
+    resp = client.get("/api/spend-by-group", params={"by": "evil; drop table"})  # type: ignore[attr-defined]
+    assert resp.status_code == 400

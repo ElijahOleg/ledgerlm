@@ -1,0 +1,38 @@
+<section class="card">
+  <h2>Most expensive calls — {{ calls | length }} shown, unpriced rows sort last</h2>
+  <div class="table-wrap">
+    <table>
+      <thead><tr>
+        <th>ts (UTC)</th><th>provider</th><th>model</th><th>status</th>
+        <th>project</th><th>feature</th>
+        <th class="num">in</th><th class="num">out</th>
+        <th class="num">cache r</th><th class="num">cache w</th>
+        <th class="num">cost</th><th class="num">latency</th>
+        <th>hash</th><th>tags</th>
+      </tr></thead>
+      <tbody>
+      {% for c in calls %}
+        <tr>
+          <td>{{ c.ts.strftime("%Y-%m-%d %H:%M:%S") }}</td>
+          <td>{{ c.provider }}</td>
+          <td>{{ c.model }}</td>
+          <td>{% if c.status == "ok" %}<span class="badge ok">ok</span>
+              {% else %}<span class="badge err">&#10007; {{ c.status }}</span>{% endif %}</td>
+          <td>{{ c.project or '' }}{% if not c.project %}<span class="none">—</span>{% endif %}</td>
+          <td>{{ c.feature or '' }}{% if not c.feature %}<span class="none">—</span>{% endif %}</td>
+          <td class="num">{{ c.input_tokens | num }}</td>
+          <td class="num">{{ c.output_tokens | num }}</td>
+          <td class="num">{{ (c.cache_read_tokens or 0) | num }}</td>
+          <td class="num">{{ (c.cache_write_tokens or 0) | num }}</td>
+          <td class="num">{{ c.cost_usd | usd }}</td>
+          <td class="num">{{ c.latency_ms | num }} ms</td>
+          <td class="hash">{{ c.prompt_hash | hash8 }}</td>
+          <td class="note">{% for k, v in c.tags.items() %}{{ k }}={{ v }}{{ ", " if not loop.last }}{% endfor %}</td>
+        </tr>
+      {% else %}
+        <tr><td colspan="14" class="note">no calls in this window</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>

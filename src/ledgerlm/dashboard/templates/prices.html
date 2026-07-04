@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block body %}
+<section class="card">
+  <h2>Model prices (USD per Mtok) — the DB is authoritative; edit with <code>ledgerlm prices set</code></h2>
+  <div class="table-wrap">
+    <table>
+      <thead><tr>
+        <th>provider</th><th>model</th>
+        <th class="num">input</th><th class="num">output</th>
+        <th class="num">cache read</th><th class="num">cache write</th>
+        <th>verified</th><th>freshness</th><th>note</th>
+      </tr></thead>
+      <tbody>
+      {% for p in price_rows %}
+        <tr>
+          <td>{{ p.provider }}</td>
+          <td>{{ p.model }}</td>
+          <td class="num">{{ p.input_per_mtok }}</td>
+          <td class="num">{{ p.output_per_mtok }}</td>
+          <td class="num">{% if p.cache_read_per_mtok is none %}<span class="none">—</span>{% else %}{{ p.cache_read_per_mtok }}{% endif %}</td>
+          <td class="num">{% if p.cache_write_per_mtok is none %}<span class="none">—</span>{% else %}{{ p.cache_write_per_mtok }}{% endif %}</td>
+          <td>{% if p.last_verified is none %}<span class="none">never</span>{% else %}{{ p.last_verified.isoformat() }}{% endif %}</td>
+          <td>
+            {% if p.days_since_verified is none %}
+              <span class="badge err">&#9888; UNVERIFIED</span>
+            {% elif p.stale %}
+              <span class="badge warn">&#9888; {{ p.days_since_verified }}d old</span>
+            {% else %}
+              <span class="badge ok">&#10003; {{ p.days_since_verified }}d ago</span>
+            {% endif %}
+          </td>
+          <td class="note">{% if p.note %}&#9888; {{ p.note }}{% endif %}</td>
+        </tr>
+      {% else %}
+        <tr><td colspan="9" class="note">no prices configured — run <code>ledgerlm init</code> to load the seed</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}
