@@ -22,6 +22,7 @@ from ledgerlm.providers.base import (
 
 CHAT_PATH: InterceptPath = ("chat", "completions", "create")
 RESPONSES_PATH: InterceptPath = ("responses", "create")
+RESPONSES_STREAM_HELPER_PATH: InterceptPath = ("responses", "stream")
 
 
 class ChatStreamCollector(StreamCollector):
@@ -103,7 +104,17 @@ class ResponsesStreamCollector(StreamCollector):
 
 class OpenAIAdapter(ProviderAdapter):
     name = "openai"
-    intercept_paths: tuple[InterceptPath, ...] = (CHAT_PATH, RESPONSES_PATH)
+    intercept_paths: tuple[InterceptPath, ...] = (
+        CHAT_PATH,
+        RESPONSES_PATH,
+        RESPONSES_STREAM_HELPER_PATH,
+    )
+    unrecorded_paths: tuple[tuple[InterceptPath, str], ...] = (
+        (
+            RESPONSES_STREAM_HELPER_PATH,
+            "OpenAI responses.stream() calls are not recorded in v0",
+        ),
+    )
 
     def prepare_stream(
         self, kwargs: dict[str, Any], path: InterceptPath

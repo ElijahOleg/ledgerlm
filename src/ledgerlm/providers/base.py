@@ -94,6 +94,9 @@ class ProviderAdapter(ABC):
     # Paths whose return value is a stream-manager (context manager yielding a
     # stream), e.g. Anthropic messages.stream(); handled via snapshot-at-exit.
     stream_manager_paths: tuple[InterceptPath, ...] = ()
+    # Paths passed through UNRECORDED with a one-time warning per path — for
+    # streaming surfaces v0 doesn't capture yet.
+    unrecorded_paths: tuple[tuple[InterceptPath, str], ...] = ()
 
     def prepare_stream(
         self, kwargs: dict[str, Any], path: InterceptPath

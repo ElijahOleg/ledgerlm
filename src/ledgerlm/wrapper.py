@@ -14,6 +14,7 @@ from __future__ import annotations
 import functools
 import inspect
 import logging
+import threading
 import time
 from typing import Any
 
@@ -28,6 +29,23 @@ from ledgerlm.recorder import CallEvent, Recorder
 from ledgerlm.streaming import AsyncRecordingStream, RecordingStream, RecordingStreamManager
 
 logger = logging.getLogger("ledgerlm")
+
+_warned_paths_lock = threading.Lock()
+_warned_paths: set[InterceptPath] = set()
+
+
+def _warn_unrecorded_once(path: InterceptPath, message: str) -> None:
+    with _warned_paths_lock:
+        if path in _warned_paths:
+            return
+        _warned_paths.add(path)
+    logger.warning("ledgerlm: %s", message)
+
+
+def reset_unrecorded_warnings() -> None:
+    """Clear the warn-once cache (tests)."""
+    with _warned_paths_lock:
+        _warned_paths.clear()
 
 
 def _detect_adapter(client: Any) -> ProviderAdapter:
@@ -166,6 +184,16 @@ def _manager_finisher(
 
 
 def _instrument(fn: Any, adapter: ProviderAdapter, recorder: Recorder, path: InterceptPath) -> Any:
+    for unrecorded_path, message in adapter.unrecorded_paths:
+        if path == unrecorded_path:
+
+            @functools.wraps(fn)
+            def passthrough_wrapped(*args: Any, **kwargs: Any) -> Any:
+                _warn_unrecorded_once(path, message)  # noqa: B023 - loop exits via return
+                return fn(*args, **kwargs)
+
+            return passthrough_wrapped
+
     if path in adapter.stream_manager_paths:
 
         @functools.wraps(fn)
