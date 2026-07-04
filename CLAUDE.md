@@ -1,6 +1,6 @@
 # CLAUDE.md — LedgerLM build conventions
 
-**Current phase: Phase 1 (core ledger) — in progress.**
+**Current phase: awaiting Gate 1 review (Phase 1 core ledger complete — do not start Phase 1.5).**
 <!-- Update this marker at every gate. At a hard gate set it to "awaiting Gate N review". -->
 
 ## The contract
