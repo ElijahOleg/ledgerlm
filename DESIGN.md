@@ -129,7 +129,7 @@ Rationale, briefly: token counts are exact integers and the price snapshot trave
 - **Optional extras:** `[anthropic]`, `[openai]`, `[all]`; dev tooling in `[dev]` (`pytest`, `pytest-asyncio`, `ruff`, `mypy`).
 - **Frontend:** server-rendered Jinja2 + HTMX partials + Chart.js, all vendored into `static/` (no CDNs). Chosen because the dashboard is read-mostly-with-filters (HTMX's sweet spot), it keeps the whole product in one language with zero JS build toolchain for a solo backend maintainer, and the JSON endpoints backing the pages preserve the option of a SPA later. React+Vite+Recharts was considered and rejected as a second toolchain to maintain alone for ~15% more polish.
 - **Quality:** ruff (lint + format), mypy on `src` with reasonable strictness (targeted, commented ignores acceptable at SDK boundaries), pytest with a hard no-network rule (live-key integration tests exist but are always env-gated and skipped by default).
-- **Packaging:** src layout, hatchling backend, pip-installable; CI via GitHub Actions (ruff, mypy, pytest on Python 3.11/3.12/3.13).
+- **Packaging:** src layout, hatchling backend, pip-installable; CI via GitHub Actions (ruff, mypy, pytest on Python 3.11/3.12/3.13 + docker compose smoke (Linux runner)).
 - **Containers:** Dockerfile + docker-compose for the dashboard. Known caveat: SQLite WAL over Docker Desktop bind mounts (macOS/Windows) is unreliable, so the primary run mode is `ledgerlm dashboard` on the host; compose targets Linux hosts and the future Postgres flavor.
 
 ## 8. Repository layout (final state, all phases)
@@ -163,7 +163,7 @@ ledgerlm/
     dashboard/             # Phase 2
       app.py  queries.py
       templates/*.html
-      static/  htmx.min.js  chart.umd.js  style.css
+      static/  htmx.min.js  chart.umd.js  style.css  app.js   # app.js = first-party chart glue (D23)
     alerts.py              # Phase 3
     optimizer.py           # Phase 3
     export.py              # Phase 3
@@ -311,6 +311,7 @@ Each deferred item, and the v0 seam it plugs into — the point of listing these
 | Hard budget caps / enforcement | Opt-in gateway enforcement — note the tension with principle 4 (never block); default must remain never-block |
 | Hosted multi-tenant SaaS, auth, seats | Recorder behind an API service + Postgres; auth layer above the dashboard |
 | OpenAI responses.stream() helper capture | Same snapshot-style seam as the Anthropic helper in streaming.py; v0 warns once and passes through |
+| notes/expires_on columns on model_prices | Makes expiry hints data-driven and user-editable and unlocks automatic expired-price warnings — promote from D21's display dict if the list grows or dogfood shows price drift |
 
 ## 11. Risks and mitigations
 
@@ -354,5 +355,8 @@ The contract itself stays a **single plain-markdown `DESIGN.md`** at the repo ro
 | D18 | Anthropic messages.stream() helper calls are recorded from the SDK's accumulated snapshot at context exit; first_token_ms populates only on raw stream paths, and helper-path raw_usage holds the snapshot's final usage object | Snapshot-at-exit is the only hook covering every helper consumption style without touching SDK internals; cost data and recomputability are unaffected. *(Gate 2)* |
 | D19 | D17 dropped-event warning counters are per wrapped client, not process-global | Keeps the recorder free of shared mutable state; any repeating warning already signals an incomplete ledger regardless of count partitioning. *(Gate 2)* |
 | D20 | Auto-init's write retry proceeds regardless of migration-attempt outcome; in-process programmatic upgrades are serialized behind a module lock in db/migrate.py | Losing a concurrent-initialization race degrades to a successful retry against the winner's schema, never a dropped event. Discovered constraint: concurrent in-process alembic upgrades over one SQLite file can segfault the sqlite3 extension — serialize in-process, rely on SQLite file locking cross-process. *(Gate 2)* |
+| D21 | Known-expiry/introductory-rate hints on the Prices page come from a display-layer notes table in queries.py, not a schema column | The DB stores only rates applied; a handful of static display notes doesn't justify a migration — revisit if the list grows. *(Gate 3)* |
+| D22 | httpx is a dev-extra dependency from Phase 2 (TestClient transport); it becomes a runtime dependency only in Phase 3 | Route smoke tests are required by Phase 2; no network is touched. *(Gate 3)* |
+| D23 | static/ contains first-party app.js alongside the vendored assets | Chart init from JSON fragments needs ~100 lines of glue; inlining it per-template would duplicate it across pages. *(Gate 3)* |
 
 *New rows are appended at gates as deviations are accepted.*
