@@ -27,3 +27,30 @@ jobs:
         run: mypy src
       - name: Tests
         run: pytest
+
+  # Gate 3 exit criterion 3, verified permanently: `docker compose up` works
+  # on a Linux host. Builds the image, serves the dashboard against a fresh
+  # ./data volume, and requires Overview to render on the empty ledger.
+  compose-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: docker compose up (fresh ./data volume)
+        run: docker compose up --build -d
+      - name: Poll until Overview renders on the empty ledger
+        run: |
+          for i in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:8642/ | grep -q "Spend per day"; then
+              echo "Overview is serving (200 + marker) on the empty ledger"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "dashboard never served Overview within 120s"
+          exit 1
+      - name: Logs on failure
+        if: failure()
+        run: docker compose logs
+      - name: Teardown
+        if: always()
+        run: docker compose down
