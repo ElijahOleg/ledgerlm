@@ -69,6 +69,7 @@ class LlmEvent(Base):
     status: Mapped[str] = mapped_column(String())  # "ok" | "error"
     error_type: Mapped[str | None] = mapped_column(String())
     latency_ms: Mapped[int]
+    first_token_ms: Mapped[int | None]  # streaming only (Phase 1.5)
     input_tokens: Mapped[int]  # normalized: UNCACHED input only
     output_tokens: Mapped[int]
     cache_read_tokens: Mapped[int | None]
