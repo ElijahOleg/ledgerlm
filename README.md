@@ -54,4 +54,4 @@ per-user ledger at `~/.ledgerlm/ledgerlm.db`.
 ## Status
 
 Phase 1 (core ledger) complete. Streaming capture, a local dashboard, and alerts are
-planned — see `SPEC.md` / the design doc for the roadmap.
+planned — see the design doc (`DESIGN.md.pdf` + `DESIGN-AMENDMENTS.md`) for the roadmap.

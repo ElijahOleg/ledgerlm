@@ -1,12 +1,13 @@
 # CLAUDE.md — LedgerLM build conventions
 
-**Current phase: awaiting Gate 1 review (Phase 1 core ledger complete — do not start Phase 1.5).**
+**Current phase: Phase 1.5 — ready (Gate 1 approved; not started).**
 <!-- Update this marker at every gate. At a hard gate set it to "awaiting Gate N review". -->
 
 ## The contract
 
-- `DESIGN.md.pdf` is the build contract (phases, gates, decision log). `SPEC.md` is the
-  Phase 1 work order derived from it. Where they differ, DESIGN.md governs.
+- `DESIGN.md.pdf` is the sole build contract (phases, gates, decision log).
+  Gate-approved changes to it are recorded in `DESIGN-AMENDMENTS.md` (the PDF cannot
+  be edited in-repo); where they differ, the amendment governs.
 - One phase per session. Stop at hard gates and produce the gate report — the workflow
   lives in the `executing-a-phase` skill in `.claude/skills/`.
 - The skill harness in `.claude/skills/` is contract, like DESIGN.md:
