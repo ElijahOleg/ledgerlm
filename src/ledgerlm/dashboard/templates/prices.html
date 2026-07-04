@@ -15,10 +15,10 @@
         <tr>
           <td>{{ p.provider }}</td>
           <td>{{ p.model }}</td>
-          <td class="num">{{ p.input_per_mtok }}</td>
-          <td class="num">{{ p.output_per_mtok }}</td>
-          <td class="num">{% if p.cache_read_per_mtok is none %}<span class="none">—</span>{% else %}{{ p.cache_read_per_mtok }}{% endif %}</td>
-          <td class="num">{% if p.cache_write_per_mtok is none %}<span class="none">—</span>{% else %}{{ p.cache_write_per_mtok }}{% endif %}</td>
+          <td class="num">{{ p.input_per_mtok | rate }}</td>
+          <td class="num">{{ p.output_per_mtok | rate }}</td>
+          <td class="num">{% if p.cache_read_per_mtok is none %}<span class="none">—</span>{% else %}{{ p.cache_read_per_mtok | rate }}{% endif %}</td>
+          <td class="num">{% if p.cache_write_per_mtok is none %}<span class="none">—</span>{% else %}{{ p.cache_write_per_mtok | rate }}{% endif %}</td>
           <td>{% if p.last_verified is none %}<span class="none">never</span>{% else %}{{ p.last_verified.isoformat() }}{% endif %}</td>
           <td>
             {% if p.days_since_verified is none %}

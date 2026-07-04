@@ -50,6 +50,14 @@ def _hash8(value: str | None) -> str:
     return "—" if not value else value[:8]
 
 
+def _rate(value: Decimal | None) -> str:
+    """Per-Mtok rate without trailing zeros: 10.000000 → 10, 0.075000 → 0.075."""
+    if value is None:
+        return "—"
+    s = f"{value:.6f}".rstrip("0").rstrip(".")
+    return s or "0"
+
+
 def _read_params(request: Request) -> dict[str, str]:
     """The filter state, normalized; unknown values fall back to defaults."""
     q = request.query_params
@@ -82,6 +90,7 @@ def create_app(session_factory: sessionmaker[Session] | None = None) -> FastAPI:
     templates.env.filters["usd"] = _usd
     templates.env.filters["num"] = _num
     templates.env.filters["hash8"] = _hash8
+    templates.env.filters["rate"] = _rate
 
     def get_factory() -> sessionmaker[Session]:
         if session_factory is not None:

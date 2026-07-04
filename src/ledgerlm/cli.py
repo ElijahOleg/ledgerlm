@@ -24,6 +24,8 @@ app = typer.Typer(
 )
 prices_app = typer.Typer(help="Manage the model price table.", no_args_is_help=True)
 app.add_typer(prices_app, name="prices")
+dev_app = typer.Typer(help="Development helpers (synthetic data).", no_args_is_help=True)
+app.add_typer(dev_app, name="dev")
 
 
 def _session_factory() -> Any:
@@ -114,10 +116,14 @@ def summary(
 
     # Display-surface aggregation (dialect numeric behavior accepted here);
     # stored values always go through the Decimal path in pricing.py.
+    # Cache buckets always show beside in/out: cache-heavy workloads must not
+    # look smaller than they bill.
     measures = (
         func.count().label("calls"),
         func.coalesce(func.sum(LlmEvent.input_tokens), 0).label("tokens_in"),
         func.coalesce(func.sum(LlmEvent.output_tokens), 0).label("tokens_out"),
+        func.coalesce(func.sum(LlmEvent.cache_read_tokens), 0).label("cache_read"),
+        func.coalesce(func.sum(LlmEvent.cache_write_tokens), 0).label("cache_write"),
         func.sum(LlmEvent.cost_usd).label("cost_usd"),
         func.sum(case((LlmEvent.cost_usd.is_(None), 1), else_=0)).label("unpriced"),
     )
@@ -138,26 +144,37 @@ def summary(
             rows = [tuple(r) for r in result]
             label = by
 
-    header = (label, "calls", "tokens_in", "tokens_out", "cost_usd", "unpriced")
+    header = (
+        label,
+        "calls",
+        "tokens_in",
+        "tokens_out",
+        "cache_read",
+        "cache_write",
+        "cost_usd",
+        "unpriced",
+    )
     table = [
         (
-            str(name),
-            str(calls),
-            str(tokens_in),
-            str(tokens_out),
-            "-" if cost is None else f"${Decimal(str(cost)):,.4f}",
-            str(unpriced_count or 0),
+            str(row[0]),  # group label
+            str(row[1]),  # calls
+            str(row[2]),  # tokens_in
+            str(row[3]),  # tokens_out
+            str(row[4]),  # cache_read
+            str(row[5]),  # cache_write
+            "-" if row[6] is None else f"${Decimal(str(row[6])):,.4f}",
+            str(row[7] or 0),  # unpriced
         )
-        for name, calls, tokens_in, tokens_out, cost, unpriced_count in rows
+        for row in rows
     ]
     widths = [
         max(len(header[i]), *(len(r[i]) for r in table)) if table else len(header[i])
-        for i in range(6)
+        for i in range(len(header))
     ]
     typer.echo("  ".join(h.ljust(widths[i]) for i, h in enumerate(header)))
     for r in table:
         typer.echo("  ".join(v.ljust(widths[i]) for i, v in enumerate(r)))
-    total_unpriced = sum(int(r[5]) for r in table)
+    total_unpriced = sum(int(r[7]) for r in table)
     typer.echo(
         f"\nunpriced rows in window: {total_unpriced} "
         "(cost totals exclude unpriced rows; fix with `ledgerlm prices set` + `prices backfill`)"
@@ -278,6 +295,162 @@ def prices_backfill() -> None:
             filled += 1
         session.commit()
     typer.echo(f"backfilled {filled} rows; {skipped} still unpriced")
+
+
+@app.command()
+def dashboard(
+    host: Annotated[
+        str, typer.Option(help="Bind address. 127.0.0.1 = this machine only (v0 has no auth).")
+    ] = "127.0.0.1",
+    port: Annotated[int, typer.Option(help="Port to listen on.")] = 8642,
+) -> None:
+    """Serve the local read-only dashboard (fully offline; assets vendored)."""
+    import uvicorn
+
+    from ledgerlm.dashboard.app import create_app
+
+    if host not in ("127.0.0.1", "localhost", "::1"):
+        typer.echo(
+            f"WARNING: binding {host} exposes the dashboard beyond this machine; "
+            "v0 has no authentication.",
+            err=True,
+        )
+    typer.echo(f"LedgerLM dashboard: http://{host}:{port}  (ledger: {get_settings().db_url})")
+    uvicorn.run(create_app(), host=host, port=port, log_level="warning")
+
+
+@dev_app.command("seed-demo")
+def seed_demo(
+    rows: Annotated[int, typer.Option(help="Approximate number of events to generate")] = 100_000,
+    days: Annotated[int, typer.Option(help="Spread events over this many days")] = 90,
+    seed: Annotated[int, typer.Option(help="RNG seed (deterministic output)")] = 1,
+    force: Annotated[
+        bool, typer.Option("--force", help="Seed even if the ledger already has events")
+    ] = False,
+) -> None:
+    """Fill the configured ledger with synthetic events for development,
+    screenshots, and performance checks.
+
+    Several projects/features/models, cache-heavy calls, unpriced rows
+    (an unknown model), and a few errors. Costs go through the real Decimal
+    pricing path against the seeded price table; the unknown model stays
+    NULL — never a fabricated $0.
+    """
+    import random
+
+    from sqlalchemy import insert
+
+    from ledgerlm.pricing import compute_cost, get_rates
+
+    existing_check = select(func.count()).select_from(LlmEvent)
+    with _session_factory()() as session:
+        existing = session.execute(existing_check).scalar_one()
+        if existing and not force:
+            typer.echo(
+                f"ledger already has {existing} events; refusing to add demo data "
+                "(use --force to seed anyway, or point LEDGERLM_DB_URL at a scratch file)"
+            )
+            raise typer.Exit(code=1)
+
+        rng = random.Random(seed)
+        projects = {
+            "blog-net": ["summarize", "outline", "seo-rank", "publish"],
+            "shop-bot": ["classify", "reply", "escalate"],
+            "research": ["extract", "cluster"],
+        }
+        # (provider, model, cache-eligible, error-rate); one model has no
+        # price entry so a realistic slice of rows lands unpriced.
+        models = [
+            ("anthropic", "claude-fable-5", True, 0.01),
+            ("anthropic", "claude-sonnet-5", True, 0.01),
+            ("anthropic", "claude-haiku-4-5", False, 0.005),
+            ("openai", "gpt-5.4", True, 0.02),
+            ("openai", "gpt-5.4-mini", False, 0.01),
+            ("openai", "gpt-experimental-preview", False, 0.02),  # unpriced
+        ]
+        rates_cache = {
+            (provider, model): get_rates(session, provider, model)
+            for provider, model, _, _ in models
+        }
+
+        now = utcnow()
+        batch: list[dict[str, Any]] = []
+        inserted = 0
+        unpriced = 0
+        errors = 0
+        for _ in range(rows):
+            provider, model, cacheable, error_rate = rng.choice(models)
+            project = rng.choice(list(projects))
+            feature = rng.choice(projects[project])
+            ts = now - dt.timedelta(
+                days=rng.uniform(0, days), seconds=rng.uniform(0, 3600)
+            )
+            is_error = rng.random() < error_rate
+            input_tokens = rng.randint(200, 12_000)
+            output_tokens = 0 if is_error else rng.randint(50, 4_000)
+            cache_read = (
+                rng.randint(1_000, 60_000) if cacheable and rng.random() < 0.55 else 0
+            )
+            cache_write = (
+                rng.randint(500, 20_000) if cacheable and rng.random() < 0.25 else 0
+            )
+            usage = NormalizedUsage(
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                cache_read_tokens=cache_read or None,
+                cache_write_tokens=cache_write or None,
+            )
+            rates = rates_cache[(provider, model)]
+            cost: Decimal | None = None
+            snapshot: dict[str, str] | None = None
+            if rates is not None and not is_error:
+                priced = compute_cost(usage, rates)
+                if priced is not None:
+                    cost, snapshot = priced
+            if cost is None and not is_error:
+                unpriced += 1
+            if is_error:
+                errors += 1
+            batch.append(
+                {
+                    "ts": ts,
+                    "provider": provider,
+                    "model": model,
+                    "status": "error" if is_error else "ok",
+                    "error_type": "RateLimitError" if is_error else None,
+                    "latency_ms": rng.randint(180, 14_000),
+                    "first_token_ms": rng.randint(90, 1_500) if rng.random() < 0.4 else None,
+                    "input_tokens": input_tokens,
+                    "output_tokens": output_tokens,
+                    "cache_read_tokens": cache_read or None,
+                    "cache_write_tokens": cache_write or None,
+                    "raw_usage": {"input_tokens": input_tokens, "output_tokens": output_tokens},
+                    "price_snapshot": snapshot,
+                    "cost_usd": cost,
+                    "prompt_hash": f"{rng.getrandbits(256):064x}",
+                    "project": project,
+                    "feature": feature,
+                    "env": rng.choice(["prod", "prod", "prod", "dev"]),
+                    "run_id": f"run-{rng.randint(1, 400):04d}",
+                    "customer": rng.choice([None, "acme", "globex", "initech"]),
+                    "tags": {"team": rng.choice(["core", "infra", "growth"]), "demo": "true"},
+                    "provider_request_id": None,
+                    "created_at": ts,
+                }
+            )
+            if len(batch) >= 5_000:
+                session.execute(insert(LlmEvent), batch)
+                inserted += len(batch)
+                batch = []
+                typer.echo(f"  ...{inserted} rows", err=True)
+        if batch:
+            session.execute(insert(LlmEvent), batch)
+            inserted += len(batch)
+        session.commit()
+    typer.echo(
+        f"seeded {inserted} demo events over {days} days "
+        f"({unpriced} unpriced, {errors} errors) — try `ledgerlm dashboard`"
+    )
 
 
 if __name__ == "__main__":
