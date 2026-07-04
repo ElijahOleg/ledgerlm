@@ -26,6 +26,9 @@ dependencies = [
     "typer",
     "pydantic-settings",
     "pyyaml",
+    "fastapi",
+    "uvicorn",
+    "jinja2",
 ]
 
 [project.optional-dependencies]
@@ -39,6 +42,7 @@ dev = [
     "ruff",
     "mypy",
     "types-PyYAML",
+    "httpx",  # FastAPI TestClient transport; no test ever touches the network
 ]
 
 [project.scripts]
