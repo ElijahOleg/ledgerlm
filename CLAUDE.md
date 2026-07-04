@@ -1,9 +1,6 @@
 # CLAUDE.md — LedgerLM build conventions
 
-**Current phase: Phase 1.5 — ready (Gate 1 approved; not started).**
-<!-- In-flight note: Phase 1.5 scope includes D17 (recorder resilience) — SQLite
-     auto-init on schema-less ledger + rate-limited repeating drop warnings with
-     cumulative counts, with two required tests. See DESIGN.md §9 Phase 1.5 / §13. -->
+**Current phase: awaiting Gate 2 review (Phase 1.5 streaming capture + D17 complete — do not start Phase 2).**
 <!-- Update this marker at every gate. At a hard gate set it to "awaiting Gate N review". -->
 
 ## The contract
