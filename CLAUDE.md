@@ -1,6 +1,6 @@
 # CLAUDE.md — LedgerLM build conventions
 
-**Current phase: Phase 2 — ready (Gate 2 approved; not started).**
+**Current phase: awaiting Gate 3 review (Phase 2 built; report in the 2026-07-04 session).**
 <!-- Update this marker at every gate. At a hard gate set it to "awaiting Gate N review". -->
 
 ## The contract
