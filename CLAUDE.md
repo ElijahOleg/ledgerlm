@@ -1,13 +1,16 @@
 # CLAUDE.md — LedgerLM build conventions
 
 **Current phase: Phase 1.5 — ready (Gate 1 approved; not started).**
+<!-- In-flight note: Phase 1.5 scope includes D17 (recorder resilience) — SQLite
+     auto-init on schema-less ledger + rate-limited repeating drop warnings with
+     cumulative counts, with two required tests. See DESIGN.md §9 Phase 1.5 / §13. -->
 <!-- Update this marker at every gate. At a hard gate set it to "awaiting Gate N review". -->
 
 ## The contract
 
-- `DESIGN.md.pdf` is the sole build contract (phases, gates, decision log).
-  Gate-approved changes to it are recorded in `DESIGN-AMENDMENTS.md` (the PDF cannot
-  be edited in-repo); where they differ, the amendment governs.
+- `DESIGN.md` (v1.2) is the sole build contract (phases, gates, decision log).
+  Approved changes are edits to that file, committed as `docs(design)` — never a PDF
+  or sidecar amendment document (D16).
 - One phase per session. Stop at hard gates and produce the gate report — the workflow
   lives in the `executing-a-phase` skill in `.claude/skills/`.
 - The skill harness in `.claude/skills/` is contract, like DESIGN.md:
