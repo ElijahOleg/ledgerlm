@@ -1,0 +1,77 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "ledgerlm"
+version = "0.0.1"
+description = "Local-first cost ledger for LLM API calls: wrap your client, get trustworthy per-call spend attribution."
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+authors = [{ name = "Elijah Oleg" }]
+keywords = ["llm", "cost", "tracking", "anthropic", "openai", "observability"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+dependencies = [
+    "sqlalchemy>=2",
+    "alembic",
+    "typer",
+    "pydantic-settings",
+    "pyyaml",
+]
+
+[project.optional-dependencies]
+anthropic = ["anthropic"]
+openai = ["openai"]
+all = ["ledgerlm[anthropic,openai]"]
+dev = [
+    "ledgerlm[all]",
+    "pytest",
+    "pytest-asyncio",
+    "ruff",
+    "mypy",
+    "types-PyYAML",
+]
+
+[project.scripts]
+ledgerlm = "ledgerlm.cli:app"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/ledgerlm"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"data/prices_seed.yaml" = "ledgerlm/data/prices_seed.yaml"
+
+[tool.ruff]
+line-length = 99
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM", "RUF"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+files = ["src"]
+warn_unreachable = true
+
+[[tool.mypy.overrides]]
+module = ["alembic.*"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+filterwarnings = [
+    # SQLAlchemy warns that SQLite's NUMERIC is float-backed; DESIGN.md accepts this
+    # because every row's cost is recomputable from raw_usage + price_snapshot.
+    "ignore:Dialect sqlite\\+pysqlite does \\*not\\* support Decimal:",
+]
