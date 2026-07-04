@@ -57,6 +57,44 @@ def test_auto_init_never_touches_non_sqlite(monkeypatch: pytest.MonkeyPatch) -> 
     assert recorder._sqlite_url() is None  # Postgres is never auto-migrated
 
 
+def test_concurrent_auto_init_race_records_both_events(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Two recorders racing to initialize one empty ledger: the loser's write
+    must retry against the winner's schema, never drop (D20)."""
+    import threading
+
+    db_path = tmp_path / "race.db"
+    monkeypatch.setenv("LEDGERLM_DB_URL", f"sqlite:///{db_path}")
+    reset_default_session_factory()
+    reset_warned_models()
+
+    barrier = threading.Barrier(2)
+    errors: list[BaseException] = []
+
+    def call(project: str) -> None:
+        try:
+            client = ledgerlm.wrap(MockLLMClient())  # own Recorder per client
+            barrier.wait(timeout=10)
+            with ledgerlm.tags(project=project):
+                resp = client.messages.create(model="mock-model", messages=MESSAGES)
+            assert resp.content == "mock response"
+        except BaseException as exc:  # surfaced below; never swallowed silently
+            errors.append(exc)
+
+    threads = [threading.Thread(target=call, args=(f"racer-{i}",)) for i in range(2)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join(timeout=30)
+    assert not errors, errors
+
+    factory = create_session_factory(create_db_engine())
+    with factory() as session:
+        projects = sorted(session.execute(select(LlmEvent.project)).scalars().all())
+    assert projects == ["racer-0", "racer-1"]  # both events recorded
+
+
 def test_persistent_failure_repeats_warnings_with_cumulative_counts(
     caplog: pytest.LogCaptureFixture,
 ) -> None:

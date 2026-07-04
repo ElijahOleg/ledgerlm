@@ -63,17 +63,27 @@ class Recorder:
             return
         except OperationalError as exc:
             if self._try_auto_init(exc):
+                # Retry REGARDLESS of the migration attempt's outcome (D20):
+                # losing a concurrent-initialization race means another
+                # process/recorder created the schema — the write must go
+                # against the winner's schema, never be dropped.
                 try:
                     self._record(event)
                     return
                 except Exception:
-                    logger.exception("ledgerlm: write retry after auto-init failed")
+                    logger.debug("ledgerlm: write retry after auto-init failed", exc_info=True)
         except Exception:
             logger.debug("ledgerlm: event write failed", exc_info=True)
         self._note_dropped(event)
 
     def _try_auto_init(self, exc: OperationalError) -> bool:
-        """Migrate a schema-less SQLite ledger to head, once per recorder."""
+        """Attempt to migrate a schema-less SQLite ledger; True if attempted.
+
+        Returns whether an attempt was made (once per recorder), NOT whether
+        the migration itself succeeded — a concurrent initializer may have
+        won the race, in which case our alembic run fails but the schema
+        exists and the caller's retry succeeds.
+        """
         if self._auto_init_attempted or "no such table" not in str(exc):
             return False
         self._auto_init_attempted = True
@@ -85,8 +95,13 @@ class Recorder:
 
             upgrade_to_head(url)
         except Exception:
-            logger.exception("ledgerlm: failed to auto-initialize ledger at %s", url)
-            return False
+            logger.warning(
+                "ledgerlm: auto-initialization of %s did not complete (possibly lost a "
+                "concurrent-init race); retrying the write anyway",
+                url,
+                exc_info=True,
+            )
+            return True
         logger.warning("ledgerlm: initialized empty ledger schema at %s", url)
         return True
 
