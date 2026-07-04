@@ -1,2 +1,123 @@
-# LedgerLM price seed — populated in Phase 1.
-prices: []
+# LedgerLM price seed — per-Mtok USD rates.
+#
+# Loaded by `ledgerlm init` ONLY when model_prices is empty; the DB is
+# authoritative thereafter (edit with `ledgerlm prices set`, not this file).
+#
+# Verification: rates below were checked on 2026-07-03 against the official
+# pricing pages —
+#   Anthropic: https://platform.claude.com/docs/en/about-claude/pricing
+#   OpenAI:    https://developers.openai.com/api/docs/pricing
+#
+# cache_write rates are Anthropic's 5-MINUTE cache-write rate (1.25x input).
+# 1-hour cache writes bill at 2x input; Phase 1 stores a single cache-write
+# rate, so 1h-TTL-heavy workloads are slightly underpriced — raw_usage keeps
+# the full breakdown for later recomputation. OpenAI does not bill cache
+# writes (cache_write: null) and reports cached tokens as reads only.
+
+prices:
+  # ---- Anthropic ----
+  - provider: anthropic
+    model: claude-fable-5
+    input_per_mtok: "10.00"
+    output_per_mtok: "50.00"
+    cache_read_per_mtok: "1.00"
+    cache_write_per_mtok: "12.50"
+    last_verified: 2026-07-03
+  - provider: anthropic
+    model: claude-opus-4-8
+    input_per_mtok: "5.00"
+    output_per_mtok: "25.00"
+    cache_read_per_mtok: "0.50"
+    cache_write_per_mtok: "6.25"
+    last_verified: 2026-07-03
+  - provider: anthropic
+    model: claude-opus-4-7
+    input_per_mtok: "5.00"
+    output_per_mtok: "25.00"
+    cache_read_per_mtok: "0.50"
+    cache_write_per_mtok: "6.25"
+    last_verified: 2026-07-03
+  - provider: anthropic
+    model: claude-opus-4-6
+    input_per_mtok: "5.00"
+    output_per_mtok: "25.00"
+    cache_read_per_mtok: "0.50"
+    cache_write_per_mtok: "6.25"
+    last_verified: 2026-07-03
+  - provider: anthropic
+    model: claude-opus-4-5
+    input_per_mtok: "5.00"
+    output_per_mtok: "25.00"
+    cache_read_per_mtok: "0.50"
+    cache_write_per_mtok: "6.25"
+    last_verified: 2026-07-03
+  # Introductory pricing in effect through 2026-08-31; standard pricing from
+  # 2026-09-01 is 3.00 / 15.00 (cache read 0.30, 5m write 3.75). Update via
+  # `ledgerlm prices set` when it changes — historical rows keep their snapshots.
+  - provider: anthropic
+    model: claude-sonnet-5
+    input_per_mtok: "2.00"
+    output_per_mtok: "10.00"
+    cache_read_per_mtok: "0.20"
+    cache_write_per_mtok: "2.50"
+    last_verified: 2026-07-03
+  - provider: anthropic
+    model: claude-sonnet-4-6
+    input_per_mtok: "3.00"
+    output_per_mtok: "15.00"
+    cache_read_per_mtok: "0.30"
+    cache_write_per_mtok: "3.75"
+    last_verified: 2026-07-03
+  - provider: anthropic
+    model: claude-sonnet-4-5
+    input_per_mtok: "3.00"
+    output_per_mtok: "15.00"
+    cache_read_per_mtok: "0.30"
+    cache_write_per_mtok: "3.75"
+    last_verified: 2026-07-03
+  - provider: anthropic
+    model: claude-haiku-4-5
+    input_per_mtok: "1.00"
+    output_per_mtok: "5.00"
+    cache_read_per_mtok: "0.10"
+    cache_write_per_mtok: "1.25"
+    last_verified: 2026-07-03
+
+  # ---- OpenAI ---- (no cache-write billing; cached input bills as reads)
+  - provider: openai
+    model: gpt-5.5
+    input_per_mtok: "5.00"
+    output_per_mtok: "30.00"
+    cache_read_per_mtok: "0.50"
+    cache_write_per_mtok: null
+    last_verified: 2026-07-03
+  - provider: openai
+    model: gpt-5.4
+    input_per_mtok: "2.50"
+    output_per_mtok: "15.00"
+    cache_read_per_mtok: "0.25"
+    cache_write_per_mtok: null
+    last_verified: 2026-07-03
+  - provider: openai
+    model: gpt-5.4-mini
+    input_per_mtok: "0.75"
+    output_per_mtok: "4.50"
+    cache_read_per_mtok: "0.075"
+    cache_write_per_mtok: null
+    last_verified: 2026-07-03
+  - provider: openai
+    model: gpt-5.4-nano
+    input_per_mtok: "0.20"
+    output_per_mtok: "1.25"
+    cache_read_per_mtok: "0.02"
+    cache_write_per_mtok: null
+    last_verified: 2026-07-03
+
+  # ---- Mock ---- (deterministic rates so smoke tests exercise real cost math)
+  - provider: mock
+    model: mock-model
+    input_per_mtok: "3.00"
+    output_per_mtok: "15.00"
+    cache_read_per_mtok: "0.30"
+    cache_write_per_mtok: "3.75"
+    last_verified: 2026-07-03
