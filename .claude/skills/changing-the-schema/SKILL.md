@@ -25,6 +25,11 @@ therefore follows a fixed procedure.
 - SQLite pragmas (WAL, busy_timeout) belong in engine/session setup, never in
   migrations.
 - Timestamps are UTC, always (DESIGN.md §3.8).
+- Programmatic upgrades always go through db/migrate.py's entry point, which
+  serializes in-process runs behind a module lock — concurrent alembic upgrades
+  over one SQLite file can segfault the sqlite3 extension (observed at Gate 2).
+  Cross-process concurrency is handled by SQLite's file locking plus the
+  caller's write retry.
 
 ## Procedure
 
