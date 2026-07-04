@@ -53,11 +53,60 @@ def _int_or_none(value: Any) -> int | None:
     return None if value is None else int(value)
 
 
+class StreamCollector(ABC):
+    """Observes a stream's events as they pass to the caller; accumulates usage.
+
+    Collectors never mutate events. ``observe`` returning True means the event
+    is swallowed (used only for the OpenAI usage chunk LedgerLM itself
+    injected — see D12); everything else reaches the caller untouched.
+    """
+
+    completed: bool = False
+
+    @abstractmethod
+    def observe(self, event: Any) -> bool:
+        """Inspect one event; return True to swallow it."""
+
+    @abstractmethod
+    def is_content(self, event: Any) -> bool:
+        """True if this event counts as content for first_token_ms."""
+
+    @abstractmethod
+    def usage(self) -> NormalizedUsage | None:
+        """Normalized buckets from what has been observed so far, or None."""
+
+    @abstractmethod
+    def raw_usage(self) -> dict[str, Any]:
+        """The provider's usage payload(s), verbatim."""
+
+    def model(self) -> str | None:
+        return None
+
+    def request_id(self) -> str | None:
+        return None
+
+
 class ProviderAdapter(ABC):
     """One per provider. Stateless; the wrap() proxy consults it per call."""
 
     name: str
     intercept_paths: tuple[InterceptPath, ...]
+    # Paths whose return value is a stream-manager (context manager yielding a
+    # stream), e.g. Anthropic messages.stream(); handled via snapshot-at-exit.
+    stream_manager_paths: tuple[InterceptPath, ...] = ()
+
+    def prepare_stream(
+        self, kwargs: dict[str, Any], path: InterceptPath
+    ) -> tuple[dict[str, Any], StreamCollector | None]:
+        """Adjust request kwargs for capture and return a fresh collector.
+
+        Returning None means this path's streams are passed through unrecorded.
+        """
+        return kwargs, None
+
+    def stream_snapshot(self, stream: Any) -> tuple[Any | None, bool]:
+        """(usage-bearing snapshot, completed) for stream-manager paths."""
+        return None, False
 
     @abstractmethod
     def extract_usage(self, response: Any) -> Any | None:

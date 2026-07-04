@@ -15,16 +15,107 @@ from ledgerlm.providers.base import (
     InterceptPath,
     NormalizedUsage,
     ProviderAdapter,
+    StreamCollector,
     canonical_hash,
+    usage_to_dict,
 )
 
 CHAT_PATH: InterceptPath = ("chat", "completions", "create")
 RESPONSES_PATH: InterceptPath = ("responses", "create")
 
 
+class ChatStreamCollector(StreamCollector):
+    """Chat Completions streaming: usage arrives in a final usage-only chunk
+    (empty ``choices``) when ``stream_options.include_usage`` is set. If
+    LedgerLM injected that option, the chunk is swallowed so the caller-visible
+    stream is byte-identical to what they wrote code against (D12)."""
+
+    def __init__(self, adapter: OpenAIAdapter, injected: bool) -> None:
+        self._adapter = adapter
+        self._injected = injected
+        self._usage: Any | None = None
+        self._model: str | None = None
+
+    def observe(self, event: Any) -> bool:
+        model = getattr(event, "model", None)
+        if model:
+            self._model = str(model)
+        usage = getattr(event, "usage", None)
+        if usage is not None:
+            self._usage = usage
+            self.completed = True
+            if self._injected and not getattr(event, "choices", None):
+                return True  # the chunk we asked for — caller never opted in
+        return False
+
+    def is_content(self, event: Any) -> bool:
+        return bool(getattr(event, "choices", None))
+
+    def usage(self) -> NormalizedUsage | None:
+        if self._usage is None:
+            return None
+        return self._adapter.normalize_usage(self._usage, CHAT_PATH)
+
+    def raw_usage(self) -> dict[str, Any]:
+        return usage_to_dict(self._usage)
+
+    def model(self) -> str | None:
+        return self._model
+
+
+class ResponsesStreamCollector(StreamCollector):
+    """Responses API streaming: usage rides on the terminal completed event's
+    ``response`` object. Nothing is injected or swallowed."""
+
+    def __init__(self, adapter: OpenAIAdapter) -> None:
+        self._adapter = adapter
+        self._usage: Any | None = None
+        self._model: str | None = None
+        self._request_id: str | None = None
+
+    def observe(self, event: Any) -> bool:
+        response = getattr(event, "response", None)
+        if response is not None:
+            model = getattr(response, "model", None)
+            if model:
+                self._model = str(model)
+            usage = getattr(response, "usage", None)
+            if usage is not None:
+                self._usage = usage
+            if getattr(event, "type", "") == "response.completed":
+                self.completed = True
+        return False
+
+    def is_content(self, event: Any) -> bool:
+        return "delta" in str(getattr(event, "type", ""))
+
+    def usage(self) -> NormalizedUsage | None:
+        if self._usage is None:
+            return None
+        return self._adapter.normalize_usage(self._usage, RESPONSES_PATH)
+
+    def raw_usage(self) -> dict[str, Any]:
+        return usage_to_dict(self._usage)
+
+    def model(self) -> str | None:
+        return self._model
+
+
 class OpenAIAdapter(ProviderAdapter):
     name = "openai"
     intercept_paths: tuple[InterceptPath, ...] = (CHAT_PATH, RESPONSES_PATH)
+
+    def prepare_stream(
+        self, kwargs: dict[str, Any], path: InterceptPath
+    ) -> tuple[dict[str, Any], StreamCollector | None]:
+        if path == RESPONSES_PATH:
+            return kwargs, ResponsesStreamCollector(self)
+        options = dict(kwargs.get("stream_options") or {})
+        caller_opted_in = options.get("include_usage") is True
+        if not caller_opted_in:
+            options["include_usage"] = True
+            kwargs = {**kwargs, "stream_options": options}
+        return kwargs, ChatStreamCollector(self, injected=not caller_opted_in)
 
     def extract_usage(self, response: Any) -> Any | None:
         return getattr(response, "usage", None)
