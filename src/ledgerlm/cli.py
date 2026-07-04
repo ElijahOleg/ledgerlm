@@ -382,18 +382,12 @@ def seed_demo(
             provider, model, cacheable, error_rate = rng.choice(models)
             project = rng.choice(list(projects))
             feature = rng.choice(projects[project])
-            ts = now - dt.timedelta(
-                days=rng.uniform(0, days), seconds=rng.uniform(0, 3600)
-            )
+            ts = now - dt.timedelta(days=rng.uniform(0, days), seconds=rng.uniform(0, 3600))
             is_error = rng.random() < error_rate
             input_tokens = rng.randint(200, 12_000)
             output_tokens = 0 if is_error else rng.randint(50, 4_000)
-            cache_read = (
-                rng.randint(1_000, 60_000) if cacheable and rng.random() < 0.55 else 0
-            )
-            cache_write = (
-                rng.randint(500, 20_000) if cacheable and rng.random() < 0.25 else 0
-            )
+            cache_read = rng.randint(1_000, 60_000) if cacheable and rng.random() < 0.55 else 0
+            cache_write = rng.randint(500, 20_000) if cacheable and rng.random() < 0.25 else 0
             usage = NormalizedUsage(
                 input_tokens=input_tokens,
                 output_tokens=output_tokens,
