@@ -1,0 +1,21 @@
+# LedgerLM dashboard via compose.
+#
+# CAVEAT: SQLite in WAL mode over a Docker Desktop bind mount (macOS/Windows)
+# is unreliable — the WAL index uses shared memory that does not survive the
+# VM file-sharing layer. This compose file targets LINUX hosts. On macOS or
+# Windows, run the dashboard directly on the host instead:
+#
+#     pip install ledgerlm && ledgerlm dashboard
+#
+# The ./data bind mount holds the ledger (data/ledgerlm.db). Point your
+# instrumented apps at the same file with
+# LEDGERLM_DB_URL=sqlite:///./data/ledgerlm.db (path resolved from this dir).
+
+services:
+  dashboard:
+    build: .
+    ports:
+      - "127.0.0.1:8642:8642" # localhost-only: the v0 dashboard has no auth
+    volumes:
+      - ./data:/data
+    restart: unless-stopped
