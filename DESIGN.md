@@ -152,10 +152,12 @@ ledgerlm/
     tagging.py             # contextvars tag scope
     pricing.py             # price lookup + Decimal cost computation
     recorder.py            # event persistence; never raises
+    streaming.py           # recording wrappers for streamed calls
     providers/
       base.py  anthropic.py  openai.py  mock.py
     db/
       models.py  session.py
+      migrate.py           # programmatic alembic upgrade (D15, D17)
       migrations/          # alembic env + versions
     cli.py                 # Typer entry point `ledgerlm`
     dashboard/             # Phase 2
@@ -287,7 +289,7 @@ with ledgerlm.tags(project="blog-net", feature="summarize", run_id=run_id):
 
 **Build / do:**
 - **Dogfood:** instrument the blog-automation network for ≥ 1 week of real traffic.
-- **Reconciliation (the honesty test):** compare LedgerLM's recorded totals for that window against the Anthropic and OpenAI console/usage reports for the same window. Investigate every delta until explained (unpriced rows, pre-1.5 streamed calls, timed-out requests, price drift) and write `RECONCILIATION.md` documenting method, numbers, and causes. Target: within a few percent, itemized.
+- **Reconciliation (the honesty test):** compare LedgerLM's recorded totals for that window against the Anthropic and OpenAI console/usage reports for the same window. Investigate every delta until explained (unpriced rows, pre-1.5 streamed calls, abandoned-stream partials, timed-out requests, price drift) and write `RECONCILIATION.md` documenting method, numbers, and causes. Target: within a few percent, itemized.
 - Fix what dogfooding surfaces; this is the phase's real backlog.
 - Docs: README with real screenshots (from `seed-demo`), full quickstart, CHANGELOG; version to 0.1.0.
 - Packaging: confirm PyPI name availability (fallbacks decided at the gate if taken); build sdist/wheel; TestPyPI → clean-venv install smoke → publish to PyPI; tag `v0.1.0`.
@@ -308,6 +310,7 @@ Each deferred item, and the v0 seam it plugs into — the point of listing these
 | Slack/Discord alert delivery | Delivery plugins beside the webhook sender |
 | Hard budget caps / enforcement | Opt-in gateway enforcement — note the tension with principle 4 (never block); default must remain never-block |
 | Hosted multi-tenant SaaS, auth, seats | Recorder behind an API service + Postgres; auth layer above the dashboard |
+| OpenAI responses.stream() helper capture | Same snapshot-style seam as the Anthropic helper in streaming.py; v0 warns once and passes through |
 
 ## 11. Risks and mitigations
 
@@ -348,5 +351,8 @@ The contract itself stays a **single plain-markdown `DESIGN.md`** at the repo ro
 | D15 | `ledgerlm init` migrates via Alembic's programmatic API; migration scripts ship as package data (verified with a non-editable install) | init must work from any directory with only the installed package; alembic.ini remains for developer use. *(Gate 1)* |
 | D16 | The contract is a single plain-markdown DESIGN.md at the repo root — never a PDF or other binary; approved changes are edits to this file, not sidecar amendment documents | Gate 1 actions briefly forked the contract (a committed PDF plus an amendments file with precedence rules); a diffable single source of truth is the working agreement's core mechanism. *(Gate 1)* |
 | D17 | Recorder auto-initializes an empty/schema-less SQLite ledger (programmatic migration + one retry; SQLite only, never Postgres) and emits rate-limited repeating warnings with a cumulative dropped-event count on persistent failures | Never-raise (P4) must not become silent data loss (P1–P3): during Gate 1 verification, a call against an uninitialized ledger dropped its event with only a swallowed log line. Ships in Phase 1.5. *(Gate 1 review)* |
+| D18 | Anthropic messages.stream() helper calls are recorded from the SDK's accumulated snapshot at context exit; first_token_ms populates only on raw stream paths, and helper-path raw_usage holds the snapshot's final usage object | Snapshot-at-exit is the only hook covering every helper consumption style without touching SDK internals; cost data and recomputability are unaffected. *(Gate 2)* |
+| D19 | D17 dropped-event warning counters are per wrapped client, not process-global | Keeps the recorder free of shared mutable state; any repeating warning already signals an incomplete ledger regardless of count partitioning. *(Gate 2)* |
+| D20 | Auto-init's write retry proceeds regardless of migration-attempt outcome | Losing a concurrent-initialization race degrades to a successful retry against the winner's schema, never a dropped event. *(Gate 2)* |
 
 *New rows are appended at gates as deviations are accepted.*
