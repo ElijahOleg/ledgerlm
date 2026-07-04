@@ -1,6 +1,6 @@
 # CLAUDE.md — LedgerLM build conventions
 
-**Current phase: Phase 3 — ready (Gate 3 approved; not started).**
+**Current phase: Phase 3 — ready (Gate 3 approved; not started). (Gate 3 verification: compose-smoke green — https://github.com/ElijahOleg/ledgerlm/actions/runs/28723168228)**
 <!-- Update this marker at every gate. At a hard gate set it to "awaiting Gate N review". -->
 
 ## The contract
