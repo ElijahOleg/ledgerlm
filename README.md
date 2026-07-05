@@ -70,8 +70,44 @@ Docker: `docker compose up` serves the dashboard with the ledger in `./data/` �
 **Linux hosts only**. SQLite WAL over Docker Desktop bind mounts (macOS/Windows) is
 unreliable; on those platforms run `ledgerlm dashboard` on the host instead.
 
+## Alerts
+
+Configure budget and spike alerts in a `ledgerlm.toml` next to where you run the check:
+
+```toml
+[alerts]
+daily_budget_usd = 25.00        # budget rule: current UTC-day spend >= this
+spike_multiplier = 2.0          # spike rule: trailing-24h spend >= 2x the
+baseline_days = 7               #   median of the prior 7 daily totals...
+min_spend_floor_usd = 1.00      #   ...and at least this (anti-noise floor)
+webhook_url = "https://example.com/hook"
+cooldown_minutes = 360          # at most one firing per rule per window
+```
+
+Then either cron `ledgerlm alerts check` (exit code 1 = new firing) **or** run the
+dashboard with `--alerts-every N` seconds — both use the same evaluation path.
+**Run one evaluator in v0, not both:** concurrent evaluators can race the cooldown
+dedupe check and double-fire. Firings are delivered as a webhook POST (JSON with
+rule, window, observed vs threshold, top contributors) and persisted locally; an
+undelivered firing is retried once per subsequent check until it lands.
+
+## Optimizer and export
+
+```bash
+ledgerlm optimize --since 30d   # also a dashboard page
+ledgerlm export events --since 30d --out events.csv
+ledgerlm export summary --by model --out summary.csv
+```
+
+The optimizer makes arithmetic-only claims — what identical token buckets would
+cost at other models' current rates, calls above their feature's p95 input size,
+and repeated prompts that never hit cache. It never claims a cheaper model's
+output quality would match; its findings are candidates for experiments. Exports
+are plain CSV: money as exact decimal strings, an empty cost cell meaning
+*unpriced* (never a fabricated 0).
+
 ## Status
 
-Core ledger, streaming capture, and the local dashboard are built (Phase 2 awaiting
-gate review). Alerts, the optimizer report, and CSV export are planned — see
-`DESIGN.md` for the roadmap.
+Core ledger, streaming capture, local dashboard, alerts, optimizer, and CSV export
+are built (Gate 4 approved). Remaining before v0.1.0: dogfooding, invoice
+reconciliation, and release — see `DESIGN.md` for the roadmap.

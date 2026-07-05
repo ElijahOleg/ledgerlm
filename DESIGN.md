@@ -358,5 +358,8 @@ The contract itself stays a **single plain-markdown `DESIGN.md`** at the repo ro
 | D21 | Known-expiry/introductory-rate hints on the Prices page come from a display-layer notes table in queries.py, not a schema column | The DB stores only rates applied; a handful of static display notes doesn't justify a migration — revisit if the list grows. *(Gate 3)* |
 | D22 | httpx is a dev-extra dependency from Phase 2 (TestClient transport); it becomes a runtime dependency only in Phase 3 | Route smoke tests are required by Phase 2; no network is touched. *(Gate 3)* |
 | D23 | static/ contains first-party app.js alongside the vendored assets | Chart init from JSON fragments needs ~100 lines of glue; inlining it per-template would duplicate it across pages. *(Gate 3)* |
+| D24 | `export summary` accepts the same `--by` dimensions as `summary` | A summary export with no grouping dimension answers almost no real question; mirrors existing CLI semantics rather than inventing new ones. *(Gate 4)* |
+| D25 | A firing starts its cooldown when persisted, but an undelivered firing is retried once per subsequent check until delivered (row updated in place; never a new row) | Cooldown governs alert noise; delivery failure must not silently eat the one alert that mattered. *(Gate 4)* |
+| D26 | Spike baselines count empty days as $0; the min-spend floor is the sole noise gate | New or resumed usage is a spike by definition — firing on spend-after-silence is intended behavior, not an artifact. *(Gate 4)* |
 
 *New rows are appended at gates as deviations are accepted.*

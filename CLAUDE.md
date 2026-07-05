@@ -1,7 +1,12 @@
 # CLAUDE.md — LedgerLM build conventions
 
-**Current phase: awaiting Gate 4 review (Phase 3 built: alerts, optimizer, CSV export).**
+**Current phase: Phase 4 — ready (Gate 4 approved with D24–D26; not started).**
 <!-- Update this marker at every gate. At a hard gate set it to "awaiting Gate N review". -->
+
+Notes for Phase 4 (from Gate 4 review):
+- `dev seed-demo` should grow repeated prompt-hash clusters so the optimizer's
+  cache-candidates section populates in README screenshots.
+- Polish list: quantize alert threshold display (`$4.00000000000` → `$4.00`).
 
 ## The contract
 
