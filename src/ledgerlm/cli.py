@@ -340,6 +340,8 @@ def alerts_check(
             state = f"over threshold, suppressed by cooldown ({alert_config.cooldown_minutes}m)"
         else:
             state = "ok"
+        if outcome.redelivered:
+            state += "; previously undelivered webhook redelivered"
         typer.echo(
             f"{ev.rule}: observed ${ev.observed} vs threshold ${ev.threshold} "
             f"[{ev.unpriced} unpriced rows excluded] — {state}"

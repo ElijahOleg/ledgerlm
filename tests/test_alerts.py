@@ -200,6 +200,55 @@ def test_delivery_failure_is_recorded_not_raised(
         assert outcome.firing.response_status is None
 
 
+def test_undelivered_firing_redelivered_once_no_new_row(
+    ledger: Ledger, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """D25: cooldown suppresses new firings, not delivery of an existing one."""
+
+    def listener_down(*args: Any, **kwargs: Any) -> Any:
+        raise httpx.ConnectError("connection refused")
+
+    monkeypatch.setattr(httpx, "post", listener_down)
+    now = utcnow()
+    seed_spike(ledger.session_factory, now)
+    config = spike_config()
+
+    with ledger.session_factory() as session:
+        (first,) = check_alerts(session, config, now=now)
+        assert first.firing is not None
+        assert first.firing.delivered is False  # persisted undelivered
+
+        received: list[dict[str, Any]] = []
+
+        def listener_up(
+            url: str, json: Any = None, headers: Any = None, timeout: Any = None
+        ) -> Any:
+            received.append(json)
+            return _FakeResponse(200)
+
+        monkeypatch.setattr(httpx, "post", listener_up)
+
+        # Next check, inside cooldown: redelivers the existing firing exactly
+        # once, updates the row in place, and exit-code semantics are
+        # unchanged (still no NEW firing).
+        (second,) = check_alerts(session, config, now=now + dt.timedelta(minutes=5))
+        assert second.suppressed_by_cooldown is True
+        assert second.firing is None
+        assert second.redelivered is True
+        assert len(received) == 1
+        assert received[0]["rule"] == "spike"
+
+        firings = session.query(AlertFiring).all()
+        assert len(firings) == 1  # updated in place, never a new row
+        assert firings[0].delivered is True
+        assert firings[0].response_status == 200
+
+        # Once delivered, later checks do not deliver again.
+        (third,) = check_alerts(session, config, now=now + dt.timedelta(minutes=10))
+        assert third.redelivered is False
+        assert len(received) == 1
+
+
 def test_cli_alerts_check_exit_codes(
     ledger: Ledger, tmp_path: Path, webhook_calls: list[dict[str, Any]]
 ) -> None:

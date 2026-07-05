@@ -123,6 +123,7 @@ class RuleOutcome:
     evaluation: Evaluation
     suppressed_by_cooldown: bool
     firing: AlertFiring | None  # persisted row; None unless a new firing happened
+    redelivered: bool = False  # a previously undelivered firing was delivered this check (D25)
 
 
 def _window_spend(session: Session, start: dt.datetime, end: dt.datetime) -> tuple[Decimal, int]:
@@ -185,15 +186,24 @@ def evaluate_rules(
     return evaluations
 
 
-def _in_cooldown(session: Session, rule: str, now: dt.datetime, cooldown_minutes: int) -> bool:
-    last: dt.datetime | None = session.execute(
-        select(func.max(AlertFiring.fired_at)).where(AlertFiring.rule == rule)
-    ).scalar_one()
-    if last is None:
-        return False
-    if last.tzinfo is None:  # raw SQL max() bypasses the UTCDateTime decorator
-        last = last.replace(tzinfo=dt.UTC)
-    return now - last < dt.timedelta(minutes=cooldown_minutes)
+def _governing_firing(
+    session: Session, rule: str, now: dt.datetime, cooldown_minutes: int
+) -> AlertFiring | None:
+    """The rule's most recent firing if it is still inside its cooldown window."""
+    firing = session.execute(
+        select(AlertFiring)
+        .where(AlertFiring.rule == rule)
+        .order_by(AlertFiring.fired_at.desc())
+        .limit(1)
+    ).scalar_one_or_none()
+    if firing is None:
+        return None
+    fired_at = firing.fired_at
+    if fired_at.tzinfo is None:
+        fired_at = fired_at.replace(tzinfo=dt.UTC)
+    if now - fired_at < dt.timedelta(minutes=cooldown_minutes):
+        return firing
+    return None
 
 
 def top_contributors(
@@ -267,6 +277,33 @@ def deliver_webhook(config: AlertConfig, payload: dict[str, object]) -> tuple[bo
     return response.is_success, response.status_code
 
 
+def _retry_undelivered(session: Session, config: AlertConfig, governing: AlertFiring) -> bool:
+    """Reattempt a governing firing's webhook once (D25); update the row in place.
+
+    Cooldown suppresses NEW firings, not delivery of the one that already
+    fired — a webhook outage must not silently eat the alert that mattered.
+    Never a new row; the payload is rebuilt from the stored firing.
+    """
+    _total, unpriced = _window_spend(session, governing.window_start, governing.window_end)
+    payload = build_payload(
+        session,
+        Evaluation(
+            rule=governing.rule,
+            window_start=governing.window_start,
+            window_end=governing.window_end,
+            observed=Decimal(governing.observed),
+            threshold=Decimal(governing.threshold),
+            unpriced=unpriced,
+            fired=True,
+        ),
+    )
+    delivered, status = deliver_webhook(config, payload)
+    governing.delivered = delivered
+    governing.response_status = status
+    session.commit()
+    return delivered
+
+
 def check_alerts(
     session: Session, config: AlertConfig, now: dt.datetime | None = None
 ) -> list[RuleOutcome]:
@@ -274,16 +311,36 @@ def check_alerts(
 
     The single evaluation path behind both ``ledgerlm alerts check`` and the
     dashboard background tick. A firing is persisted whether or not delivery
-    succeeds — cooldown is about alert noise, not webhook health.
+    succeeds — cooldown is about alert noise, not webhook health; an
+    undelivered firing is retried once per subsequent check until it lands
+    (D25). Exit-code/outcome semantics are unaffected by redelivery.
     """
     now = now or utcnow()
     outcomes: list[RuleOutcome] = []
     for evaluation in evaluate_rules(session, config, now):
+        governing = _governing_firing(session, evaluation.rule, now, config.cooldown_minutes)
+        redelivered = False
+        if governing is not None and not governing.delivered and config.webhook_url:
+            redelivered = _retry_undelivered(session, config, governing)
         if not evaluation.fired:
-            outcomes.append(RuleOutcome(evaluation, suppressed_by_cooldown=False, firing=None))
+            outcomes.append(
+                RuleOutcome(
+                    evaluation,
+                    suppressed_by_cooldown=False,
+                    firing=None,
+                    redelivered=redelivered,
+                )
+            )
             continue
-        if _in_cooldown(session, evaluation.rule, now, config.cooldown_minutes):
-            outcomes.append(RuleOutcome(evaluation, suppressed_by_cooldown=True, firing=None))
+        if governing is not None:
+            outcomes.append(
+                RuleOutcome(
+                    evaluation,
+                    suppressed_by_cooldown=True,
+                    firing=None,
+                    redelivered=redelivered,
+                )
+            )
             continue
         payload = build_payload(session, evaluation)
         delivered, status = deliver_webhook(config, payload)
