@@ -350,6 +350,88 @@ def alerts_check(
 
 
 @app.command()
+def optimize(
+    since: Annotated[str, typer.Option(help="Window: e.g. 7d, 24h, 30d")] = "30d",
+    limit: Annotated[int, typer.Option(help="Groups/calls shown per section")] = 10,
+    min_repeats: Annotated[
+        int, typer.Option(help="Cache candidates: minimum repeats of a prompt_hash")
+    ] = 3,
+) -> None:
+    """Arithmetic-only savings report: what-if repricing, token-heavy calls,
+    cache candidates. Candidates for experiments — never quality claims."""
+    from ledgerlm.optimizer import (
+        CACHE_SAVINGS_ASSUMPTION,
+        DISCLAIMER,
+        OptimizerFilters,
+        build_report,
+    )
+
+    filters = OptimizerFilters(since=_parse_since(since))
+    with _session_factory()() as session:
+        report = build_report(
+            session, filters, group_limit=limit, call_limit=limit, min_repeats=min_repeats
+        )
+
+    typer.echo(f"LedgerLM optimizer — window: last {since}\n")
+    typer.echo(f"NOTE: {DISCLAIMER}\n")
+    typer.echo(
+        f"unpriced rows in window: {report.window_unpriced} "
+        "(excluded from every dollar figure below)\n"
+    )
+
+    typer.echo("== What-if repricing (top groups by spend) ==")
+    if not report.repricing:
+        typer.echo("  no priced groups in window")
+    for g in report.repricing:
+        scope = f"project={g.project or '(none)'} feature={g.feature or '(none)'}"
+        typer.echo(
+            f"\n  {scope} on {g.provider}/{g.model}: "
+            f"{g.calls} calls, ${g.current_cost:,.4f} ({g.unpriced} unpriced rows excluded)"
+        )
+        typer.echo(
+            f"    tokens: in {g.input_tokens:,} / out {g.output_tokens:,} / "
+            f"cache r {g.cache_read_tokens:,} / cache w {g.cache_write_tokens:,}"
+        )
+        if not g.candidates:
+            typer.echo("    no cheaper model prices these token buckets")
+        for c in g.candidates:
+            typer.echo(
+                f"    identical tokens on {c.provider}/{c.model} = "
+                f"${c.cost_usd:,.4f} ({c.delta_pct}%)"
+            )
+
+    typer.echo("\n== Token-heavy calls (input tokens above their feature's p95) ==")
+    if not report.token_heavy:
+        typer.echo("  none found")
+    for t in report.token_heavy:
+        cost = "unpriced" if t.cost_usd is None else f"${t.cost_usd:,.4f}"
+        typer.echo(
+            f"  #{t.id} {t.ts:%Y-%m-%d %H:%M} feature={t.feature or '(none)'} "
+            f"{t.provider}/{t.model}: {t.input_tokens:,} input tokens "
+            f"(feature p95 {t.feature_p95:,}), {cost}"
+        )
+
+    typer.echo(
+        f"\n== Cache candidates (prompt_hash repeated >= {min_repeats}, zero cache reads) =="
+    )
+    if not report.cache_candidates:
+        typer.echo("  none found")
+    else:
+        typer.echo(f"  NOTE: {CACHE_SAVINGS_ASSUMPTION}")
+    for cc in report.cache_candidates:
+        savings = (
+            "n/a (no rates for this model — unpriced)"
+            if cc.est_savings_usd is None
+            else f"est. savings ${cc.est_savings_usd:,.4f} at cache-read rate"
+        )
+        typer.echo(
+            f"  {cc.prompt_hash[:12]} {cc.provider}/{cc.model}: {cc.repeats} repeats, "
+            f"{cc.repeat_input_tokens:,} repeat input tokens -> {savings}"
+        )
+    typer.echo(f"\nNOTE: {DISCLAIMER}")
+
+
+@app.command()
 def dashboard(
     host: Annotated[
         str, typer.Option(help="Bind address. 127.0.0.1 = this machine only (v0 has no auth).")

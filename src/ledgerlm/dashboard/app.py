@@ -208,6 +208,23 @@ def create_app(
             ctx["calls"] = queries.top_calls(session, _filters(ctx["params"]), limit=limit)
         return render(request, ctx, "top_calls.html", "_top_calls.html")
 
+    @app.get("/optimizer", response_class=HTMLResponse)
+    def optimizer_page(request: Request) -> HTMLResponse:
+        from ledgerlm import optimizer
+
+        with get_factory()() as session:
+            ctx = base_context(request, session, "optimizer")
+            params = ctx["params"]
+            filters = optimizer.OptimizerFilters(
+                since=_filters(params).since,
+                provider=params["provider"] or None,
+                model=params["model"] or None,
+                project=params["project"] or None,
+            )
+            ctx["report"] = optimizer.build_report(session, filters)
+            ctx["cache_savings_assumption"] = optimizer.CACHE_SAVINGS_ASSUMPTION
+        return render(request, ctx, "optimizer.html", "_optimizer.html")
+
     @app.get("/prices", response_class=HTMLResponse)
     def prices_page(request: Request) -> HTMLResponse:
         with get_factory()() as session:

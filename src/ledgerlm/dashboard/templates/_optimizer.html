@@ -1,0 +1,99 @@
+<div class="banner-unpriced" role="note">
+  <span aria-hidden="true">&#9432;</span>
+  <span><strong>{{ report.disclaimer }}</strong></span>
+</div>
+
+<section class="card">
+  <h2>What-if repricing <span class="note">— identical token buckets at other models' current
+    rates · {{ report.window_unpriced | num }} unpriced row{{ 's' if report.window_unpriced != 1 else '' }}
+    in window excluded from every dollar figure</span></h2>
+  <div class="table-wrap">
+    <table>
+      <thead><tr>
+        <th>project</th><th>feature</th><th>model</th><th class="num">calls</th>
+        <th class="num">in</th><th class="num">out</th><th class="num">cache r</th>
+        <th class="num">cache w</th><th class="num">current cost</th>
+        <th class="num">unpriced</th><th>identical tokens on…</th>
+      </tr></thead>
+      <tbody>
+      {% for g in report.repricing %}
+        <tr>
+          <td>{{ g.project or '(none)' }}</td>
+          <td>{{ g.feature or '(none)' }}</td>
+          <td>{{ g.provider }}/{{ g.model }}</td>
+          <td class="num">{{ g.calls | num }}</td>
+          <td class="num">{{ g.input_tokens | num }}</td>
+          <td class="num">{{ g.output_tokens | num }}</td>
+          <td class="num">{{ g.cache_read_tokens | num }}</td>
+          <td class="num">{{ g.cache_write_tokens | num }}</td>
+          <td class="num">{{ g.current_cost | usd }}</td>
+          <td class="num">{{ g.unpriced | num }}</td>
+          <td>
+            {% for c in g.candidates %}
+              {{ c.provider }}/{{ c.model }} = {{ c.cost_usd | usd }} ({{ c.delta_pct }}%){{ '' if loop.last else ' · ' }}
+            {% else %}<span class="note">no cheaper model prices these buckets</span>{% endfor %}
+          </td>
+        </tr>
+      {% else %}
+        <tr><td colspan="11" class="note">no priced groups in this window</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="card">
+  <h2>Token-heavy calls <span class="note">— input tokens above their feature's p95</span></h2>
+  <div class="table-wrap">
+    <table>
+      <thead><tr>
+        <th>id</th><th>time (UTC)</th><th>project</th><th>feature</th><th>model</th>
+        <th class="num">input tokens</th><th class="num">feature p95</th><th class="num">cost</th>
+      </tr></thead>
+      <tbody>
+      {% for t in report.token_heavy %}
+        <tr>
+          <td>{{ t.id }}</td>
+          <td>{{ t.ts.strftime('%Y-%m-%d %H:%M') }}</td>
+          <td>{{ t.project or '(none)' }}</td>
+          <td>{{ t.feature or '(none)' }}</td>
+          <td>{{ t.provider }}/{{ t.model }}</td>
+          <td class="num">{{ t.input_tokens | num }}</td>
+          <td class="num">{{ t.feature_p95 | num }}</td>
+          <td class="num">{{ t.cost_usd | usd if t.cost_usd is not none else 'unpriced' }}</td>
+        </tr>
+      {% else %}
+        <tr><td colspan="8" class="note">none found in this window</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="card">
+  <h2>Cache candidates <span class="note">— repeated prompts that never hit cache</span></h2>
+  {% if report.cache_candidates %}<p class="note">{{ cache_savings_assumption }}</p>{% endif %}
+  <div class="table-wrap">
+    <table>
+      <thead><tr>
+        <th>prompt hash</th><th>model</th><th class="num">repeats</th>
+        <th class="num">repeat input tokens</th><th class="num">est. savings</th>
+      </tr></thead>
+      <tbody>
+      {% for cc in report.cache_candidates %}
+        <tr>
+          <td><code>{{ cc.prompt_hash | hash8 }}</code></td>
+          <td>{{ cc.provider }}/{{ cc.model }}</td>
+          <td class="num">{{ cc.repeats | num }}</td>
+          <td class="num">{{ cc.repeat_input_tokens | num }}</td>
+          <td class="num">{{ cc.est_savings_usd | usd if cc.est_savings_usd is not none else 'n/a (unpriced)' }}</td>
+        </tr>
+      {% else %}
+        <tr><td colspan="5" class="note">none found in this window</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<p class="note">{{ report.disclaimer }}</p>
