@@ -6,7 +6,11 @@ import datetime as dt
 import re
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
-from typing import Annotated, Any
+
+# Optional[...] (not ``X | None``) in CLI option annotations: typer 0.12
+# misreads the union form as a valueless flag ("Got unexpected extra
+# argument"). Applies to every typer.Option/Argument annotation below.
+from typing import Annotated, Any, Optional
 
 import typer
 import yaml
@@ -108,7 +112,7 @@ def _parse_since(since: str) -> dt.datetime:
 def summary(
     since: Annotated[str, typer.Option(help="Window: e.g. 7d, 24h, 30d")] = "7d",
     by: Annotated[
-        str | None, typer.Option(help="Group by: provider|model|project|feature")
+        Optional[str], typer.Option(help="Group by: provider|model|project|feature")
     ] = None,
 ) -> None:
     """Calls, tokens in/out, and cost for the window — plus the unpriced-row count."""
@@ -229,8 +233,8 @@ def prices_set(
     model: str,
     input: Annotated[str, typer.Option("--input", help="USD per Mtok, uncached input")],
     output: Annotated[str, typer.Option("--output", help="USD per Mtok, output")],
-    cache_read: Annotated[str | None, typer.Option("--cache-read")] = None,
-    cache_write: Annotated[str | None, typer.Option("--cache-write")] = None,
+    cache_read: Annotated[Optional[str], typer.Option("--cache-read")] = None,
+    cache_write: Annotated[Optional[str], typer.Option("--cache-write")] = None,
 ) -> None:
     """Insert or update the rates for (PROVIDER, MODEL)."""
     with _session_factory()() as session:
@@ -356,12 +360,12 @@ def export(
     what: Annotated[str, typer.Argument(help="What to export: events | summary")],
     since: Annotated[str, typer.Option(help="Window: e.g. 7d, 24h, 30d")] = "30d",
     by: Annotated[
-        str | None,
+        Optional[str],
         typer.Option(help="summary only — group by: provider|model|project|feature"),
     ] = None,
     format: Annotated[str, typer.Option("--format", help="Output format (csv)")] = "csv",
     out: Annotated[
-        Path | None, typer.Option("--out", help="Output file (default: stdout)")
+        Optional[Path], typer.Option("--out", help="Output file (default: stdout)")
     ] = None,
 ) -> None:
     """Export ledger events or grouped summary as CSV (opens in a spreadsheet)."""

@@ -23,7 +23,7 @@ classifiers = [
 dependencies = [
     "sqlalchemy>=2",
     "alembic",
-    "typer",
+    "typer>=0.12",  # honest floor: CLI options verified against 0.12.5 (Optional-style annotations)
     "pydantic-settings",
     "pyyaml",
     "fastapi",
@@ -60,6 +60,11 @@ src = ["src", "tests"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "UP", "B", "SIM", "RUF"]
+
+[tool.ruff.lint.per-file-ignores]
+# CLI options must stay Optional[X]: typer 0.12 misparses `X | None` options
+# as valueless flags (found by the first external install).
+"src/ledgerlm/cli.py" = ["UP045"]
 
 [tool.mypy]
 python_version = "3.11"
