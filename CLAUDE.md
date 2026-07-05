@@ -1,6 +1,6 @@
 # CLAUDE.md — LedgerLM build conventions
 
-**Current phase: Phase 4 — ready (Gate 4 approved with D24–D26; not started).**
+**Current phase: Phase 4 — in progress (wave 1 done: typer-0.12 CLI fix, py.typed, contract v1.3; recording path untouched). Remaining: dogfood, reconciliation, release.**
 <!-- Update this marker at every gate. At a hard gate set it to "awaiting Gate N review". -->
 
 Notes for Phase 4 (from Gate 4 review):
@@ -10,7 +10,7 @@ Notes for Phase 4 (from Gate 4 review):
 
 ## The contract
 
-- `DESIGN.md` (v1.2) is the sole build contract (phases, gates, decision log).
+- `DESIGN.md` (v1.3) is the sole build contract (phases, gates, decision log).
   Approved changes are edits to that file, committed as `docs(design)` — never a PDF
   or sidecar amendment document (D16).
 - One phase per session. Stop at hard gates and produce the gate report — the workflow
