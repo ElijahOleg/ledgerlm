@@ -29,6 +29,7 @@ dependencies = [
     "fastapi",
     "uvicorn",
     "jinja2",
+    "httpx",  # alert webhook delivery (Phase 3, D22); the only outbound calls LedgerLM makes
 ]
 
 [project.optional-dependencies]
@@ -42,7 +43,6 @@ dev = [
     "ruff",
     "mypy",
     "types-PyYAML",
-    "httpx",  # FastAPI TestClient transport; no test ever touches the network
 ]
 
 [project.scripts]

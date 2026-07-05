@@ -26,6 +26,10 @@ prices_app = typer.Typer(help="Manage the model price table.", no_args_is_help=T
 app.add_typer(prices_app, name="prices")
 dev_app = typer.Typer(help="Development helpers (synthetic data).", no_args_is_help=True)
 app.add_typer(dev_app, name="dev")
+alerts_app = typer.Typer(
+    help="Budget/spike alerts (config in ledgerlm.toml).", no_args_is_help=True
+)
+app.add_typer(alerts_app, name="alerts")
 
 
 def _session_factory() -> Any:
@@ -297,12 +301,70 @@ def prices_backfill() -> None:
     typer.echo(f"backfilled {filled} rows; {skipped} still unpriced")
 
 
+@alerts_app.command("check")
+def alerts_check(
+    config: Annotated[Path, typer.Option("--config", help="Path to ledgerlm.toml")] = Path(
+        "ledgerlm.toml"
+    ),
+) -> None:
+    """Evaluate the budget and spike rules once; deliver webhooks for new firings.
+
+    Cron-able: exit code 1 when a new firing was persisted this run, 0 when
+    nothing fired (including firings suppressed by cooldown), 2 on config errors.
+    """
+    from ledgerlm.alerts import AlertConfigError, check_alerts, load_config
+
+    try:
+        alert_config = load_config(config)
+    except AlertConfigError as exc:
+        typer.echo(f"error: {exc}", err=True)
+        raise typer.Exit(code=2) from exc
+
+    with _session_factory()() as session:
+        outcomes = check_alerts(session, alert_config)
+
+    fired = False
+    for outcome in outcomes:
+        ev = outcome.evaluation
+        if outcome.firing is not None:
+            fired = True
+            delivery = (
+                f"webhook HTTP {outcome.firing.response_status}"
+                if outcome.firing.delivered
+                else "webhook NOT delivered"
+                if alert_config.webhook_url
+                else "no webhook configured"
+            )
+            state = f"FIRED ({delivery})"
+        elif outcome.suppressed_by_cooldown:
+            state = f"over threshold, suppressed by cooldown ({alert_config.cooldown_minutes}m)"
+        else:
+            state = "ok"
+        typer.echo(
+            f"{ev.rule}: observed ${ev.observed} vs threshold ${ev.threshold} "
+            f"[{ev.unpriced} unpriced rows excluded] — {state}"
+        )
+    if not outcomes:
+        typer.echo("no rules evaluated (set daily_budget_usd and/or baseline_days in [alerts])")
+    raise typer.Exit(code=1 if fired else 0)
+
+
 @app.command()
 def dashboard(
     host: Annotated[
         str, typer.Option(help="Bind address. 127.0.0.1 = this machine only (v0 has no auth).")
     ] = "127.0.0.1",
     port: Annotated[int, typer.Option(help="Port to listen on.")] = 8642,
+    alerts_every: Annotated[
+        int,
+        typer.Option(
+            help="Evaluate alerts in the background every N seconds (0 = off). "
+            "Same code path as `ledgerlm alerts check`."
+        ),
+    ] = 0,
+    alerts_config: Annotated[
+        Path, typer.Option(help="Path to ledgerlm.toml (used with --alerts-every)")
+    ] = Path("ledgerlm.toml"),
 ) -> None:
     """Serve the local read-only dashboard (fully offline; assets vendored)."""
     import uvicorn
@@ -316,7 +378,14 @@ def dashboard(
             err=True,
         )
     typer.echo(f"LedgerLM dashboard: http://{host}:{port}  (ledger: {get_settings().db_url})")
-    uvicorn.run(create_app(), host=host, port=port, log_level="warning")
+    if alerts_every > 0:
+        typer.echo(f"alerts tick: every {alerts_every}s from {alerts_config}")
+    uvicorn.run(
+        create_app(alerts_every=alerts_every, alerts_config=alerts_config),
+        host=host,
+        port=port,
+        log_level="warning",
+    )
 
 
 @dev_app.command("seed-demo")

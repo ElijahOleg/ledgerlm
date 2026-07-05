@@ -9,7 +9,11 @@ static/ — the dashboard makes zero non-localhost requests.
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import datetime as dt
+import logging
+from collections.abc import AsyncIterator
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
@@ -25,6 +29,8 @@ from ledgerlm.dashboard import queries
 from ledgerlm.db.models import utcnow
 
 _PKG = Path(__file__).parent
+
+logger = logging.getLogger("ledgerlm")
 
 SINCE_PRESETS: tuple[str, ...] = ("24h", "7d", "30d", "90d", "all")
 DEFAULT_SINCE = "30d"
@@ -82,8 +88,53 @@ def _filters(params: dict[str, str]) -> queries.Filters:
     )
 
 
-def create_app(session_factory: sessionmaker[Session] | None = None) -> FastAPI:
-    app = FastAPI(title="LedgerLM dashboard", docs_url=None, redoc_url=None)
+def create_app(
+    session_factory: sessionmaker[Session] | None = None,
+    *,
+    alerts_every: int = 0,
+    alerts_config: Path | None = None,
+) -> FastAPI:
+    def get_factory() -> sessionmaker[Session]:
+        if session_factory is not None:
+            return session_factory
+        from ledgerlm.db.session import get_default_session_factory
+
+        return get_default_session_factory()
+
+    def alerts_tick_once() -> None:
+        """One alert evaluation — the same code path as `ledgerlm alerts check`."""
+        from ledgerlm.alerts import check_alerts, load_config
+
+        config = load_config(alerts_config)
+        with get_factory()() as session:
+            for outcome in check_alerts(session, config):
+                if outcome.firing is not None:
+                    ev = outcome.evaluation
+                    logger.warning(
+                        "ledgerlm: alert %s fired (observed $%s vs threshold $%s)",
+                        ev.rule,
+                        ev.observed,
+                        ev.threshold,
+                    )
+
+    async def alerts_loop() -> None:
+        while True:
+            try:
+                await asyncio.to_thread(alerts_tick_once)
+            except Exception as exc:  # the tick must never kill the dashboard
+                logger.warning("ledgerlm: background alerts tick failed: %s", exc)
+            await asyncio.sleep(alerts_every)
+
+    @contextlib.asynccontextmanager
+    async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+        task = asyncio.create_task(alerts_loop()) if alerts_every > 0 else None
+        yield
+        if task is not None:
+            task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await task
+
+    app = FastAPI(title="LedgerLM dashboard", docs_url=None, redoc_url=None, lifespan=lifespan)
     app.mount("/static", StaticFiles(directory=_PKG / "static"), name="static")
 
     templates = Jinja2Templates(directory=_PKG / "templates")
@@ -91,13 +142,6 @@ def create_app(session_factory: sessionmaker[Session] | None = None) -> FastAPI:
     templates.env.filters["num"] = _num
     templates.env.filters["hash8"] = _hash8
     templates.env.filters["rate"] = _rate
-
-    def get_factory() -> sessionmaker[Session]:
-        if session_factory is not None:
-            return session_factory
-        from ledgerlm.db.session import get_default_session_factory
-
-        return get_default_session_factory()
 
     def base_context(request: Request, session: Session, page: str) -> dict[str, Any]:
         params = _read_params(request)
