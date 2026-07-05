@@ -1,6 +1,6 @@
 # LedgerLM — Design Document
 
-**Version:** 1.2 · **Date:** 2026-07-03 · **Status:** Approved for build · *(1.2: Gate 1 amendments D14–D15 folded in; D16 single-markdown-contract rule; D17 recorder resilience added to Phase 1.5 · 1.1: project skill harness — §8, §12, D13)*
+**Version:** 1.3 · **Date:** 2026-07-04 · **Status:** Approved for build · *(1.3 (2026-07-04): §14 v0.2 trajectory (incl. Phase 6 live usage meter) + D27–D29; §10 proxy row promoted · 1.2: Gate 1 amendments D14–D15 folded in; D16 single-markdown-contract rule; D17 recorder resilience added to Phase 1.5 · 1.1: project skill harness — §8, §12, D13)*
 **Role of this document:** This is the build contract. Every build session (Claude Code) starts by reading this file, executes exactly one phase, and stops at that phase's gate. It supersedes all prior planning notes. Changes to decisions are recorded in the Decision Log (§13) and committed like any other change.
 
 ---
@@ -303,7 +303,7 @@ Each deferred item, and the v0 seam it plugs into — the point of listing these
 
 | Item | Plugs into |
 |---|---|
-| Local proxy mode (OpenAI-compatible; language-agnostic) | Second producer feeding the recorder (§5) |
+| Local proxy mode (OpenAI-compatible; language-agnostic) | Second producer feeding the recorder (§5) — promoted to Phase 5 (§14) |
 | More providers (Gemini, Bedrock, ...) | One new adapter in `providers/` |
 | Batch API ingestion | New ingestion path writing `llm_events` (importer, not a wrapper) |
 | Invoice reconciliation as a feature | New table + dashboard view; manual process proven in Phase 4 |
@@ -361,5 +361,18 @@ The contract itself stays a **single plain-markdown `DESIGN.md`** at the repo ro
 | D24 | `export summary` accepts the same `--by` dimensions as `summary` | A summary export with no grouping dimension answers almost no real question; mirrors existing CLI semantics rather than inventing new ones. *(Gate 4)* |
 | D25 | A firing starts its cooldown when persisted, but an undelivered firing is retried once per subsequent check until delivered (row updated in place; never a new row) | Cooldown governs alert noise; delivery failure must not silently eat the one alert that mattered. *(Gate 4)* |
 | D26 | Spike baselines count empty days as $0; the min-spend floor is the sole noise gate | New or resumed usage is a spike by definition — firing on spend-after-silence is intended behavior, not an artifact. *(Gate 4)* |
+| D27 | v0.2 organizes around three event producers into one ledger: wrap() (attribution tier), a local proxy (coverage tier — promoted from §10), and a Claude Code importer (subscription tier) | The recorder has been producer-agnostic since v1.0 (§5); zero-config capture and account-level tracking are new producers, not a new architecture. *(v0.2 direction, 2026-07-04)* |
+| D28 | Subscription-sourced rows carry API-equivalent value, labeled as such; never mingled with invoice dollars, always excluded from provider-invoice reconciliation | Flat-rate usage has no per-token bill; presenting equivalence as billing would violate P1–P3. *(v0.2 direction)* |
+| D29 | Quota / "what's left" surfaces show official provider signals with provenance labels, or user-configured budgets — never fabricated remaining-percentage estimates | Transcript-based limit estimation is demonstrably unreliable; NULL-over-fabrication applies to quota exactly as to price. *(v0.2 direction)* |
 
 *New rows are appended at gates as deviations are accepted.*
+
+## 14. v0.2 trajectory (approved direction 2026-07-04 · detail ratified at Gate 5)
+
+One ledger for all of a user's LLM usage — API spend and subscription burn — via three event producers feeding the same recorder (§5): wrap() (attribution tier, v0.1), a local proxy (coverage tier), and a Claude Code importer (subscription tier). Nothing here alters Phase 4's scope; v0.2 phase specs are drafted after v0.1.0 ships, informed by dogfood findings.
+
+**Phase 5 — local proxy mode (producer #2).** `ledgerlm proxy`: a localhost daemon forwarding to the real APIs and recording. Zero per-app code: ANTHROPIC_BASE_URL / OPENAI_BASE_URL set once in the shell profile covers every SDK-based app on the machine. Streaming pass-through required. Attribution: per-key mapping plus optional opt-in headers — rows carry whatever attribution the channel can honestly provide.
+
+**Phase 6 — Claude Code importer (producer #3) + budget/limit surfaces.** Ingest Claude Code's local usage records (~/.claude/projects JSONL and/or OTel; exact surface pinned at design time) into the ledger. Events gain a producer/source dimension (migration). Honesty rules per D28/D29: API-equivalent valuation labeled as such and excluded from invoice reconciliation; quota surfaces show official signals with provenance labels or user budgets — never fabricated remaining-percentages.
+
+Phase 6's headline surface is a live usage meter: the session and weekly gauges rendered as Claude's own settings shows them, ambient while working. Capture: LedgerLM ships a Claude Code statusline hook that receives the official rate_limits payload on each update and stores the freshest reading. Render: (a) into the statusline itself, and (b) as an auto-refreshing dashboard tile (HTMX polling) showing both windows with provenance and freshness labels. The gauges reflect the account-wide pool (Claude and Claude Code share limits). A stale or absent reading is labeled as such — per D29, the meter never substitutes an estimate. Anything beyond terminal + dashboard (menu-bar or floating widgets) is §10 parking-lot material.
