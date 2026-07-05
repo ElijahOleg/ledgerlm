@@ -350,6 +350,54 @@ def alerts_check(
 
 
 @app.command()
+def export(
+    what: Annotated[str, typer.Argument(help="What to export: events | summary")],
+    since: Annotated[str, typer.Option(help="Window: e.g. 7d, 24h, 30d")] = "30d",
+    by: Annotated[
+        str | None,
+        typer.Option(help="summary only — group by: provider|model|project|feature"),
+    ] = None,
+    format: Annotated[str, typer.Option("--format", help="Output format (csv)")] = "csv",
+    out: Annotated[
+        Path | None, typer.Option("--out", help="Output file (default: stdout)")
+    ] = None,
+) -> None:
+    """Export ledger events or grouped summary as CSV (opens in a spreadsheet)."""
+    import io
+
+    from ledgerlm.export import SUMMARY_DIMENSIONS, export_events, export_summary
+
+    if what not in ("events", "summary"):
+        raise typer.BadParameter(f"invalid target {what!r}; choose events or summary")
+    if format != "csv":
+        raise typer.BadParameter(f"unsupported --format {format!r}; v0 exports csv only")
+    if by is not None and by not in SUMMARY_DIMENSIONS:
+        raise typer.BadParameter(f"invalid --by {by!r}; choose from {sorted(SUMMARY_DIMENSIONS)}")
+    if by is not None and what != "summary":
+        raise typer.BadParameter("--by applies to `export summary` only")
+    cutoff = _parse_since(since)
+
+    buffer = io.StringIO()
+    with _session_factory()() as session:
+        if what == "events":
+            rows, unpriced = export_events(session, cutoff, buffer)
+        else:
+            rows, unpriced = export_summary(session, cutoff, by, buffer)
+
+    if out is None:
+        typer.echo(buffer.getvalue(), nl=False)
+    else:
+        out.write_text(buffer.getvalue())
+    # Every cost surface reports its unpriced count — exports included.
+    typer.echo(
+        f"exported {rows} {what} rows ({unpriced} unpriced"
+        f"{'' if what == 'events' else ' rows in totals'}) "
+        f"to {out or 'stdout'}",
+        err=True,
+    )
+
+
+@app.command()
 def optimize(
     since: Annotated[str, typer.Option(help="Window: e.g. 7d, 24h, 30d")] = "30d",
     limit: Annotated[int, typer.Option(help="Groups/calls shown per section")] = 10,
