@@ -93,6 +93,23 @@ class LlmEvent(Base):
     )
 
 
+class AlertFiring(Base):
+    """A persisted alert firing (Phase 3). Config lives in ledgerlm.toml (D11);
+    rows exist only for cooldown dedupe and the delivery audit trail."""
+
+    __tablename__ = "alert_firings"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    rule: Mapped[str] = mapped_column(String())  # "budget" | "spike"
+    window_start: Mapped[datetime] = mapped_column(UTCDateTime())
+    window_end: Mapped[datetime] = mapped_column(UTCDateTime())
+    observed: Mapped[Decimal] = mapped_column(Numeric(18, 10))
+    threshold: Mapped[Decimal] = mapped_column(Numeric(18, 10))
+    fired_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=utcnow)
+    delivered: Mapped[bool]
+    response_status: Mapped[int | None]
+
+
 class ModelPrice(Base):
     __tablename__ = "model_prices"
 
